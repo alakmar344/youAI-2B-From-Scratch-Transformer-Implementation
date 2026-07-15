@@ -58,6 +58,7 @@ class TrainingConfig:
     output_dir: str = "./checkpoints"
     seed: int = 42
     use_wandb: bool = False
+    use_accelerate: bool = False  # multi-GPU / distributed via HuggingFace accelerate
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -108,7 +109,11 @@ class Trainer:
             if hasattr(self.config, key):
                 setattr(self.config, key, value)
 
-        self.device = resolve_device(device)
+        self.accelerator = None
+        if self.config.use_accelerate:
+            self._init_accelerator()
+
+        self.device = self.accelerator.device if self.accelerator else resolve_device(device)
         self.model = model.to(self.device)
         self.train_dataloader = train_dataloader
         self.val_dataloader = val_dataloader
@@ -135,21 +140,33 @@ class Trainer:
         )
         self.scheduler = torch.optim.lr_scheduler.LambdaLR(self.optimizer, self._lr_lambda)
 
-        # Mixed precision setup (new torch.amp API, no deprecation warnings).
+        # Mixed precision. With accelerate, the Accelerator owns AMP/scaling, so
+        # our own autocast + GradScaler are disabled to avoid double-handling.
         self.amp_dtype = None
-        if self.config.mixed_precision == "fp16" and self.device.type == "cuda":
-            self.amp_dtype = torch.float16
-        elif self.config.mixed_precision == "bf16":
-            if self.device.type == "cuda" and not torch.cuda.is_bf16_supported():
-                logger.warning("bf16 not supported on this GPU; training in fp32.")
-            else:
-                self.amp_dtype = torch.bfloat16
+        if not self.accelerator:
+            if self.config.mixed_precision == "fp16" and self.device.type == "cuda":
+                self.amp_dtype = torch.float16
+            elif self.config.mixed_precision == "bf16":
+                if self.device.type == "cuda" and not torch.cuda.is_bf16_supported():
+                    logger.warning("bf16 not supported on this GPU; training in fp32.")
+                else:
+                    self.amp_dtype = torch.bfloat16
         self.use_amp = self.amp_dtype is not None
         self.scaler = torch.amp.GradScaler(
             self.device.type, enabled=self.amp_dtype == torch.float16
         )
         if self.use_amp:
             logger.info("Mixed precision: %s", self.config.mixed_precision)
+
+        if self.accelerator:
+            # Hand model / optimizer / data to accelerate (scheduler is stepped
+            # manually so its step count is not scaled by the process count).
+            prepared = self.accelerator.prepare(
+                self.model, self.optimizer, self.train_dataloader
+            )
+            self.model, self.optimizer, self.train_dataloader = prepared
+            if self.val_dataloader is not None:
+                self.val_dataloader = self.accelerator.prepare(self.val_dataloader)
 
         self.global_step = 0
         self.start_epoch = 0
@@ -179,6 +196,28 @@ class Trainer:
         if self.config.lr_scheduler == "linear":
             return min_ratio + (1 - min_ratio) * (1 - progress)
         return 1.0  # constant
+
+    def _init_accelerator(self):
+        try:
+            from accelerate import Accelerator
+        except ImportError as exc:
+            raise ImportError(
+                "use_accelerate=True requires the 'accelerate' package. "
+                "Install it with: pip install accelerate"
+            ) from exc
+        mp = self.config.mixed_precision or "no"
+        self.accelerator = Accelerator(
+            mixed_precision=mp,
+            gradient_accumulation_steps=self.config.gradient_accumulation_steps,
+        )
+        logger.info(
+            "Accelerate enabled: %d process(es), device=%s, mixed_precision=%s",
+            self.accelerator.num_processes, self.accelerator.device, mp,
+        )
+
+    @property
+    def is_main_process(self) -> bool:
+        return self.accelerator.is_main_process if self.accelerator else True
 
     def _init_wandb(self):
         try:
@@ -215,8 +254,12 @@ class Trainer:
             return None
         self.model.eval()
         total, count = 0.0, 0
-        for batch in tqdm(self.val_dataloader, desc="Evaluating", leave=False):
+        show = tqdm(self.val_dataloader, desc="Evaluating", leave=False) if self.is_main_process else self.val_dataloader
+        for batch in show:
             loss = self._forward_loss(batch)
+            if self.accelerator:
+                # Average the loss across all processes for a correct metric.
+                loss = self.accelerator.gather(loss.detach()).mean()
             total += loss.item()
             count += 1
         self.model.train()
@@ -224,6 +267,8 @@ class Trainer:
 
     def train(self) -> Dict[str, float]:
         """Run the full training loop and return final metrics."""
+        if self.accelerator:
+            return self._train_accelerate()
         cfg = self.config
         self._print_banner()
         self.model.train()
@@ -285,6 +330,71 @@ class Trainer:
             "final_val_loss": final_val,
         }
 
+    def _train_accelerate(self) -> Dict[str, float]:
+        """Training loop driven by HuggingFace accelerate (multi-GPU/distributed).
+
+        Uses ``accelerator.accumulate`` for correct gradient synchronisation and
+        only performs logging / checkpointing on the main process. The scheduler
+        is stepped manually so its schedule is independent of the world size.
+        """
+        acc = self.accelerator
+        cfg = self.config
+        if self.is_main_process:
+            self._print_banner()
+        self.model.train()
+        running_loss, logged, t0, stop = 0.0, 0, time.time(), False
+
+        for epoch in range(self.start_epoch, cfg.num_epochs):
+            iterator = self.train_dataloader
+            if self.is_main_process:
+                iterator = tqdm(iterator, desc=f"Epoch {epoch + 1}/{cfg.num_epochs}")
+            for batch in iterator:
+                with acc.accumulate(self.model):
+                    loss = self._forward_loss(batch)
+                    acc.backward(loss)
+                    if acc.sync_gradients:
+                        acc.clip_grad_norm_(self.model.parameters(), cfg.max_grad_norm)
+                    self.optimizer.step()
+                    if acc.sync_gradients:
+                        self.scheduler.step()
+                    self.optimizer.zero_grad(set_to_none=True)
+
+                running_loss += loss.item()
+                logged += 1
+                if acc.sync_gradients:
+                    self.global_step += 1
+                    if self.global_step % cfg.log_steps == 0:
+                        avg = running_loss / max(1, logged)
+                        self._log({"train/loss": avg, "train/lr": self.scheduler.get_last_lr()[0],
+                                   "train/perplexity": math.exp(min(avg, 20))})
+                        running_loss, logged = 0.0, 0
+                    if self.val_dataloader and self.global_step % cfg.eval_steps == 0:
+                        if self._do_eval_and_maybe_stop():
+                            stop = True
+                            break
+                    if self.global_step % cfg.save_steps == 0:
+                        self.save_checkpoint(f"step-{self.global_step}")
+                    if cfg.max_steps and self.global_step >= cfg.max_steps:
+                        stop = True
+                        break
+            if not stop:
+                self.save_checkpoint(f"epoch-{epoch + 1}")
+            if stop:
+                break
+
+        self.save_checkpoint("final")
+        acc.wait_for_everyone()
+        elapsed = time.time() - t0
+        final_val = self.evaluate()
+        if self.is_main_process:
+            logger.info("Training finished in %.1fs (%d steps).", elapsed, self.global_step)
+        return {
+            "global_step": self.global_step,
+            "train_time_seconds": elapsed,
+            "best_val_loss": self.best_val_loss if self.best_val_loss != float("inf") else None,
+            "final_val_loss": final_val,
+        }
+
     def _do_eval_and_maybe_stop(self) -> bool:
         val_loss = self.evaluate()
         if val_loss is None:
@@ -317,11 +427,21 @@ class Trainer:
         logger.info("=" * 56)
 
     def save_checkpoint(self, name: str):
+        # In distributed runs only the main process writes files, and we save the
+        # unwrapped model so the checkpoint has plain parameter names.
+        if self.accelerator:
+            self.accelerator.wait_for_everyone()
+            if not self.is_main_process:
+                return
+            model = self.accelerator.unwrap_model(self.model)
+        else:
+            model = self.model
+
         path = os.path.join(self.config.output_dir, name)
         os.makedirs(path, exist_ok=True)
         torch.save(
             {
-                "model_state_dict": self.model.state_dict(),
+                "model_state_dict": model.state_dict(),
                 "optimizer_state_dict": self.optimizer.state_dict(),
                 "scheduler_state_dict": self.scheduler.state_dict(),
                 "scaler_state_dict": self.scaler.state_dict(),
@@ -331,7 +451,7 @@ class Trainer:
             os.path.join(path, "pytorch_model.bin"),
         )
         with open(os.path.join(path, "config.json"), "w") as f:
-            json.dump(self.model.config.to_dict(), f, indent=2)
+            json.dump(model.config.to_dict(), f, indent=2)
         with open(os.path.join(path, "training_config.json"), "w") as f:
             json.dump(self.config.to_dict(), f, indent=2)
 

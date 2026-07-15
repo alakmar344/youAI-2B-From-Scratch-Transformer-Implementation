@@ -247,3 +247,18 @@ def benchmark_model(model: YouAIModel, device: str = "cpu", **kwargs) -> dict:
     from .export import benchmark_model as _benchmark
 
     return _benchmark(model, device=device, **kwargs)
+
+
+def serve(checkpoint: str = None, host: str = "0.0.0.0", port: int = 8000,
+          device: str = "auto", pretrained: str = None, **kwargs):
+    """Launch the FastAPI inference server (blocking).
+
+    Example::
+
+        youai.serve(checkpoint="./checkpoints/final", port=8000)
+        youai.serve(pretrained="gpt2")   # serve real GPT-2 out of the box
+    """
+    from .server import serve as _serve
+
+    return _serve(checkpoint=checkpoint, host=host, port=port,
+                  device=device, pretrained=pretrained, **kwargs)

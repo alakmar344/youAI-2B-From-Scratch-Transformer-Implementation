@@ -22,8 +22,12 @@ def cmd_train(args) -> None:
     from youai.trainer import estimate_training_time
 
     youai.set_seed(args.seed)
-    print(f"Creating '{args.preset}' model...")
-    model = youai.create_model(args.preset)
+    if args.pretrained:
+        print(f"Loading pretrained '{args.pretrained}'...")
+        model = youai.from_pretrained_gpt2(args.pretrained)
+    else:
+        print(f"Creating '{args.preset}' model...")
+        model = youai.create_model(args.preset)
 
     if args.dataset:
         train_file, val_file = youai.download_dataset(args.dataset, num_examples=args.num_examples)
@@ -47,7 +51,8 @@ def cmd_train(args) -> None:
         output_dir=args.output_dir, device=args.device,
         mixed_precision=args.mixed_precision, gradient_checkpointing=args.gradient_checkpointing,
         gradient_accumulation_steps=args.grad_accum, packing=not args.no_packing,
-        resume_from=args.resume,
+        resume_from=args.resume, use_accelerate=args.accelerate,
+        lora=args.lora, qlora=args.qlora, lora_r=args.lora_r,
     )
     print(f"\nDone. Steps: {metrics['global_step']} | "
           f"best val loss: {metrics['best_val_loss']}")
@@ -148,6 +153,13 @@ def cmd_datasets(args) -> None:
     list_datasets()
 
 
+def cmd_serve(args) -> None:
+    from youai.server import serve
+
+    serve(checkpoint=args.checkpoint, pretrained=args.pretrained,
+          host=args.host, port=args.port, device=args.device, max_batch=args.max_batch)
+
+
 def build_parser() -> argparse.ArgumentParser:
     import youai
 
@@ -157,6 +169,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     t = sub.add_parser("train", help="Train a model")
     t.add_argument("--preset", default="125m")
+    t.add_argument("--pretrained", help="Load pretrained GPT-2 weights (gpt2, gpt2-medium, ...)")
+    t.add_argument("--lora", action="store_true", help="LoRA fine-tuning (train <1%% of params)")
+    t.add_argument("--qlora", action="store_true", help="QLoRA fine-tuning (4-bit base on CUDA)")
+    t.add_argument("--lora-r", type=int, default=8, help="LoRA rank")
+    t.add_argument("--accelerate", action="store_true", help="Multi-GPU/distributed via accelerate")
     t.add_argument("--data")
     t.add_argument("--val-data")
     t.add_argument("--dataset", help="HuggingFace dataset preset")
@@ -216,6 +233,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser("datasets", help="List dataset presets")
     d.set_defaults(func=cmd_datasets)
+
+    s = sub.add_parser("serve", help="Run the FastAPI inference server")
+    s.add_argument("--checkpoint", help="Checkpoint directory to serve")
+    s.add_argument("--pretrained", help="Serve pretrained GPT-2 weights (e.g. gpt2)")
+    s.add_argument("--host", default="0.0.0.0")
+    s.add_argument("--port", type=int, default=8000)
+    s.add_argument("--device", default="auto")
+    s.add_argument("--max-batch", type=int, default=8)
+    s.set_defaults(func=cmd_serve)
 
     return parser
 

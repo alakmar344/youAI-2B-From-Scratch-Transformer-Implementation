@@ -8,7 +8,7 @@ from typing import List, Optional
 import torch
 
 from .model import YouAIModel
-from .generation import GenerationConfig
+from .generation import GenerationConfig, sample_next_token
 from .tokenizer import get_tokenizer
 from .utils import resolve_device, get_logger
 
@@ -79,6 +79,65 @@ class YouAIInference:
         for _ in range(num_return_sequences):
             output = self.model.generate(input_ids, cfg)
             tokens = output[0, prompt_len:] if skip_prompt else output[0]
+            results.append(self.tokenizer.decode(tokens, skip_special_tokens=True))
+        return results
+
+    # ------------------------------------------------------------------
+    @torch.no_grad()
+    def generate_batch(
+        self,
+        prompts: List[str],
+        max_new_tokens: int = 64,
+        temperature: float = 0.8,
+        top_k: int = 50,
+        top_p: float = 0.9,
+        repetition_penalty: float = 1.1,
+        do_sample: bool = True,
+        skip_prompt: bool = True,
+    ) -> List[str]:
+        """Generate completions for several prompts in a single batched pass.
+
+        Prompts are left-padded so a shared attention mask keeps padding out of
+        the computation. This is what the server's micro-batcher uses to raise
+        throughput under concurrent load.
+        """
+        if not prompts:
+            return []
+        tok = self.tokenizer
+        old_side = tok.padding_side
+        tok.padding_side = "left"
+        try:
+            enc = tok(prompts, return_tensors="pt", padding=True)
+        finally:
+            tok.padding_side = old_side
+
+        input_ids = enc["input_ids"].to(self.device)
+        attn = enc["attention_mask"].to(self.device)
+        cfg = GenerationConfig(
+            max_new_tokens=max_new_tokens, temperature=temperature, top_k=top_k,
+            top_p=top_p, repetition_penalty=repetition_penalty, do_sample=do_sample,
+            eos_token_id=tok.eos_token_id,
+        )
+        max_ctx = self.model.config.max_position_embeddings
+        prompt_len = input_ids.size(1)
+        generated = input_ids
+        finished = torch.zeros(len(prompts), dtype=torch.bool, device=self.device)
+
+        for step in range(max_new_tokens):
+            out = self.model(generated[:, -max_ctx:], attention_mask=attn[:, -max_ctx:])
+            next_token = sample_next_token(out["logits"][:, -1, :], generated, cfg, step)
+            next_token = torch.where(
+                finished.unsqueeze(1), torch.full_like(next_token, cfg.eos_token_id), next_token
+            )
+            generated = torch.cat([generated, next_token], dim=1)
+            attn = torch.cat([attn, torch.ones_like(next_token)], dim=1)
+            finished = finished | (next_token.squeeze(1) == cfg.eos_token_id)
+            if bool(finished.all()) or generated.size(1) >= max_ctx:
+                break
+
+        results = []
+        for row in generated:
+            tokens = row[prompt_len:] if skip_prompt else row
             results.append(self.tokenizer.decode(tokens, skip_special_tokens=True))
         return results
 
