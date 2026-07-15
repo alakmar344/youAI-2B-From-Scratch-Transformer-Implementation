@@ -10,7 +10,7 @@ with open(os.path.join(here, "README.md"), "r", encoding="utf-8") as fh:
 
 setup(
     name="youai",
-    version="2.0.0",
+    version="3.0.0",
     author="YouAI Contributors",
     description="Load, fine-tune, and serve any open-source LLM — a professional LLM toolkit with 15 model families.",
     long_description=long_description,
