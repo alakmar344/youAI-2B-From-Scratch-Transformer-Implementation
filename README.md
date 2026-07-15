@@ -61,6 +61,14 @@ train_file, val_file = youai.prepare_data([
     "path/to/data1.txt",
     "path/to/data2.txt",
 ])
+
+# Download HuggingFace dataset (recommended!)
+train_file, val_file = youai.download_dataset("tinystories")  # Fast, ~2GB
+train_file, val_file = youai.download_dataset("wikipedia")    # Encyclopedia, ~500MB
+train_file, val_file = youai.download_dataset("openwebtext")  # Web text, ~40GB
+
+# List available datasets
+youai.list_datasets()
 ```
 
 ### Train
@@ -138,6 +146,33 @@ inference = YouAIInference("./checkpoints/final")
 | `350m` | 350M | 1024 | 24 | 16 | Real applications |
 | `750m` | 750M | 1536 | 24 | 16 | Strong performance |
 | `2b` | 2B | 2048 | 24 | 16 | Production quality |
+
+## HuggingFace Datasets
+
+Download pre-built datasets for training:
+
+| Dataset | Command | Size | Best For |
+|---------|---------|------|----------|
+| **TinyStories** | `youai.download_dataset("tinystories")` | ~2GB | Quick testing, simple text |
+| **Wikipedia** | `youai.download_dataset("wikipedia")` | ~500MB | Encyclopedia knowledge |
+| **OpenWebText** | `youai.download_dataset("openwebtext")` | ~40GB | General web knowledge |
+
+```python
+import youai
+
+# Download TinyStories for quick training (recommended for testing)
+train_file, val_file = youai.download_dataset("tinystories")
+
+# Limit to 50k examples for faster download
+train_file, val_file = youai.download_dataset("tinystories", num_examples=50000)
+
+# Download Wikipedia for knowledge-heavy tasks
+train_file, val_file = youai.download_dataset("wikipedia")
+
+# Then train
+model = youai.create_model("125m")
+youai.train(model, train_file=train_file, epochs=1)
+```
 
 ## Command Line Interface
 

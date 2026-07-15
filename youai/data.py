@@ -2,12 +2,38 @@
 
 import os
 import random
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Literal
 
 import torch
 from torch.utils.data import Dataset, DataLoader
 from transformers import GPT2Tokenizer
 from tqdm import tqdm
+
+
+# Available HuggingFace datasets
+DATASET_PRESETS = {
+    "tinystories": {
+        "name": "roneneldan/TinyStories",
+        "description": "Simple short stories - great for quick training and testing",
+        "size": "~2GB",
+        "split": "train",
+    },
+    "openwebtext": {
+        "name": "openwebtext",
+        "description": "Web text from Reddit links - good for general knowledge",
+        "size": "~40GB",
+        "split": "train",
+    },
+    "wikipedia": {
+        "name": "wikitext",
+        "description": "Wikipedia articles (wikitext-103) - encyclopedia knowledge",
+        "size": "~500MB",
+        "subconfig": "wikitext-103-v1",
+        "split": "train",
+    },
+}
+
+DatasetPreset = Literal["tinystories", "openwebtext", "wikipedia"]
 
 
 class TextDataset(Dataset):
@@ -231,3 +257,106 @@ def create_dataloaders(
         )
     
     return train_dataloader, val_dataloader
+
+
+def list_datasets() -> None:
+    """Print available HuggingFace dataset presets."""
+    print("\nAvailable HuggingFace Datasets:")
+    print("=" * 50)
+    for key, info in DATASET_PRESETS.items():
+        print(f"\n  {key}")
+        print(f"    Description: {info['description']}")
+        print(f"    Size: {info['size']}")
+    print("\n" + "=" * 50)
+    print("Usage: train_file, val_file = youai.download_dataset('tinystories')")
+    print()
+
+
+def download_dataset(
+    dataset: DatasetPreset,
+    output_dir: str = "./data",
+    num_examples: Optional[int] = None,
+    train_split: float = 0.9,
+) -> Tuple[str, str]:
+    """Download and prepare a HuggingFace dataset for training.
+    
+    Args:
+        dataset: Dataset preset name ('tinystories', 'openwebtext', 'wikipedia')
+        output_dir: Directory to save data files
+        num_examples: Limit number of examples (None = use all)
+        train_split: Proportion of data for training
+        
+    Returns:
+        Tuple of (train_file_path, val_file_path)
+        
+    Examples:
+        # Download TinyStories (fast, ~2GB) - good for testing
+        train_file, val_file = youai.download_dataset("tinystories")
+        
+        # Download with limited examples
+        train_file, val_file = youai.download_dataset("tinystories", num_examples=50000)
+        
+        # Download Wikipedia
+        train_file, val_file = youai.download_dataset("wikipedia")
+    """
+    try:
+        from datasets import load_dataset
+    except ImportError:
+        raise ImportError(
+            "datasets library required. Install with: pip install datasets"
+        )
+    
+    if dataset not in DATASET_PRESETS:
+        raise ValueError(f"Unknown dataset '{dataset}'. Choose from: {list(DATASET_PRESETS.keys())}")
+    
+    preset = DATASET_PRESETS[dataset]
+    os.makedirs(output_dir, exist_ok=True)
+    
+    print(f"Downloading {dataset} dataset...")
+    print(f"Description: {preset['description']}")
+    print(f"Size: {preset['size']}")
+    
+    # Load dataset
+    if "subconfig" in preset:
+        hf_dataset = load_dataset(preset["name"], preset["subconfig"], split=preset["split"])
+    else:
+        hf_dataset = load_dataset(preset["name"], split=preset["split"])
+    
+    # Limit examples if specified
+    if num_examples and num_examples < len(hf_dataset):
+        hf_dataset = hf_dataset.select(range(num_examples))
+        print(f"Using {num_examples} examples")
+    
+    # Extract text
+    print("Processing text...")
+    texts = []
+    for example in tqdm(hf_dataset, desc="Extracting text"):
+        text = example.get("text", "").strip()
+        if text and len(text) > 10:  # Skip very short texts
+            texts.append(text)
+    
+    # Shuffle and split
+    random.shuffle(texts)
+    split_idx = int(len(texts) * train_split)
+    train_texts = texts[:split_idx]
+    val_texts = texts[split_idx:]
+    
+    # Save to files
+    train_file = os.path.join(output_dir, f"{dataset}_train.txt")
+    val_file = os.path.join(output_dir, f"{dataset}_val.txt")
+    
+    print(f"Saving {len(train_texts)} training examples...")
+    with open(train_file, 'w', encoding='utf-8') as f:
+        for text in train_texts:
+            f.write(text + '\n')
+    
+    print(f"Saving {len(val_texts)} validation examples...")
+    with open(val_file, 'w', encoding='utf-8') as f:
+        for text in val_texts:
+            f.write(text + '\n')
+    
+    print(f"\nDataset ready!")
+    print(f"  Train: {train_file} ({len(train_texts)} examples)")
+    print(f"  Val:   {val_file} ({len(val_texts)} examples)")
+    
+    return train_file, val_file

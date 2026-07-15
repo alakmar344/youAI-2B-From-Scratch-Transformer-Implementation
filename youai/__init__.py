@@ -11,6 +11,9 @@ Quick Start:
     # Prepare sample data
     train_file, val_file = youai.create_sample_data(num_examples=1000)
     
+    # Or download a HuggingFace dataset
+    train_file, val_file = youai.download_dataset("tinystories")
+    
     # Train the model
     youai.train(model, train_file=train_file, epochs=1)
     
@@ -18,6 +21,8 @@ Quick Start:
     result = youai.generate("Hello world", checkpoint_path="./checkpoints/final")
     print(result)
 """
+
+from typing import List
 
 from .config import YouAIConfig, get_preset_config
 from .model import YouAIModel
@@ -28,6 +33,8 @@ from .data import (
     create_sample_dataset,
     prepare_custom_text,
     create_dataloaders,
+    download_dataset,
+    list_datasets,
 )
 
 __version__ = "0.1.0"
@@ -37,6 +44,8 @@ __all__ = [
     "generate",
     "create_sample_data",
     "prepare_data",
+    "download_dataset",
+    "list_datasets",
     "load_model",
     "YouAIConfig",
     "YouAIModel",
