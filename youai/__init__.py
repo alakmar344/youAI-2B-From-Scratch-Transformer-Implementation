@@ -66,8 +66,24 @@ from .export import (
     ModelExporter, ModelQuantizer, EXPORT_FORMATS,
     benchmark_model as _benchmark_model_fn,
 )
+from .alignment import (
+    DPOConfig, DPOTrainer, PreferenceDataset,
+    align, create_preference_data,
+)
+from .merging import (
+    merge_models, merge_lora_into_base, model_soup,
+    list_merge_methods, MERGE_METHODS,
+)
+from .evaluation import (
+    evaluate_perplexity, evaluate_generation,
+    compute_bleu, compute_rouge_l,
+    evaluate_multiple_choice, run_benchmark,
+)
+from .advanced import (
+    compile_model, generate_model_card, plot_training_curve,
+)
 
-__version__ = "2.0.0"
+__version__ = "3.0.0"
 
 __all__ = [
     # High-level functions
@@ -81,6 +97,18 @@ __all__ = [
     "stream_generate", "export_model", "list_export_formats",
     "benchmark_model",
     "set_seed", "set_log_level",
+    # Alignment
+    "align", "DPOConfig", "DPOTrainer", "PreferenceDataset",
+    "create_preference_data",
+    # Merging
+    "merge_models", "merge_lora_into_base", "model_soup",
+    "list_merge_methods", "MERGE_METHODS",
+    # Evaluation
+    "evaluate_perplexity", "evaluate_generation",
+    "compute_bleu", "compute_rouge_l",
+    "evaluate_multiple_choice", "run_benchmark",
+    # Advanced
+    "compile_model", "generate_model_card", "plot_training_curve",
     # Pretrained + LoRA
     "from_pretrained", "from_pretrained_gpt2",
     "GPT2_VARIANTS", "SUPPORTED_FAMILIES", "POPULAR_MODELS",

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "youai"
-version = "2.0.0"
+version = "3.0.0"
 description = "Load, fine-tune, and serve any open-source LLM — 15 model families, LoRA, multi-GPU, inference server."
 readme = "README.md"
 requires-python = ">=3.9"

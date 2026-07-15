@@ -1,5 +1,56 @@
 # Changelog
 
+## 3.0.0 — Alignment, merging, evaluation
+
+### New features
+
+#### Alignment training (DPO, ORPO, SimPO)
+- `youai.align(model, "preferences.json", algorithm="dpo")` — align a model
+  with human preferences using DPO, ORPO, or SimPO.
+- `PreferenceDataset` class for loading preference data (JSON/JSONL with
+  prompt/chosen/rejected).
+- `DPOConfig` with all hyperparameters (beta, label_smoothing, lr scheduler,
+  mixed precision, etc.).
+- `create_preference_data()` to generate sample preference data for testing.
+- `DPOTrainer` with full training loop, evaluation, checkpointing.
+
+#### Model merging (4 methods)
+- `youai.merge_models(model_a, model_b, method="linear|slerp|dare|ties")`.
+- **Linear**: simple weighted average.
+- **SLERP**: spherical linear interpolation (better for LLMs).
+- **DARE**: Drop And REscale (randomly prune delta, rescale).
+- **TIES**: Trim, Elect Sign, Merge (handles conflicting updates).
+- `youai.model_soup([ckpt1, ckpt2, ckpt3])` — average multiple checkpoints.
+- `youai.merge_lora_into_base(model)` — fold LoRA adapters into base weights.
+- `youai.list_merge_methods()` — show all methods with descriptions.
+
+#### Evaluation tools
+- `youai.evaluate_perplexity(model, tokenizer, "test.txt")` — sliding-window
+  perplexity evaluation.
+- `youai.evaluate_generation(model, tokenizer, prompts)` — diversity (distinct-n),
+  repetition rate, lexical diversity.
+- `youai.compute_bleu(references, hypotheses)` — BLEU score (no external deps).
+- `youai.compute_rouge_l(references, hypotheses)` — ROUGE-L F1 score.
+- `youai.evaluate_multiple_choice(model, tokenizer, questions)` — MMLU-style
+  evaluation using log-probability scoring.
+- `youai.run_benchmark(model, tokenizer)` — comprehensive benchmark suite.
+
+#### Performance
+- `youai.compile_model(model, mode="default|reduce-overhead|max-autotune")` —
+  torch.compile integration for free speedup.
+
+#### Deployment
+- `youai.generate_model_card(model, "README.md")` — HuggingFace-compatible
+  model card generation with metrics, training config, and citations.
+- `plot_training_curve()` — ASCII training curve visualization.
+
+### Tests
+- Test suite grew from 126 → **175 tests**, all passing.
+- Added alignment loss function tests (DPO, ORPO, SimPO).
+- Added merge method tests (linear, SLERP, DARE, TIES).
+- Added evaluation tests (BLEU, ROUGE, perplexity, generation quality).
+- Added advanced utility tests (compile, model card, training curve).
+
 ## 2.0.0 — Universal pretrained model loading
 
 ### Breaking changes
