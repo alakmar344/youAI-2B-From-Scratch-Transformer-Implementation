@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youai"
+version = "2.0.0"
+description = "Load, fine-tune, and serve any open-source LLM — 15 model families, LoRA, multi-GPU, inference server."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "YouAI Contributors" }]
+keywords = ["llm", "transformer", "language-model", "pytorch", "gpt", "llama", "qwen", "mistral", "lora", "training"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+    "tqdm>=4.65.0",
+    "numpy>=1.24.0",
+]
+
+[project.optional-dependencies]
+datasets = ["datasets>=2.12.0"]
+wandb = ["wandb>=0.15.0"]
+web = ["flask>=3.0.0", "flask-cors>=4.0.0"]
+onnx = ["onnx>=1.14.0", "onnxruntime>=1.16.0"]
+safetensors = ["safetensors>=0.3.0"]
+accelerate = ["accelerate>=0.20.0"]
+server = ["fastapi>=0.100.0", "uvicorn[standard]>=0.23.0"]
+qlora = ["bitsandbytes>=0.41.0", "accelerate>=0.20.0"]
+dev = ["pytest>=7.0.0", "httpx>=0.24.0"]
+all = [
+    "datasets>=2.12.0",
+    "wandb>=0.15.0",
+    "flask>=3.0.0",
+    "flask-cors>=4.0.0",
+    "onnx>=1.14.0",
+    "onnxruntime>=1.16.0",
+    "safetensors>=0.3.0",
+    "accelerate>=0.20.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.23.0",
+    "pytest>=7.0.0",
+    "httpx>=0.24.0",
+]
+
+[project.scripts]
+youai = "youai.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/youai/youai"
+Documentation = "https://github.com/youai/youai/blob/main/DOCUMENTATION.md"
+
+[tool.setuptools.packages.find]
+exclude = ["tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

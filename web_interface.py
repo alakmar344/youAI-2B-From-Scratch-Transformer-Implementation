@@ -5,7 +5,7 @@ Serve your trained model with a beautiful web UI
 
 from flask import Flask, request, jsonify, render_template_string
 from flask_cors import CORS
-from inference import YouAIInference
+from youai import YouAIInference
 import argparse
 
 app = Flask(__name__)
