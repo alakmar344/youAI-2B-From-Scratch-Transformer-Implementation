@@ -1,229 +1,131 @@
-# YouAI - Train Your Own Language Model From Scratch
+<div align="center">
 
-A powerful yet simple library for training, using, and deploying custom language models.
+# YouAI
+
+**Train your own language model from scratch — in a few lines of Python.**
+
+A small, professional, batteries-included toolkit for building, training, serving
+and exporting transformer language models. Modern architecture, correct code,
+a real test suite, and an API you can learn in five minutes.
+
+</div>
+
+---
 
 ## Why YouAI?
 
-| Feature | YouAI | Others |
-|---------|-------|--------|
-| Lines of code | 5-10 | 100+ |
-| Learning curve | Low | High |
-| From-scratch training | Built-in | Manual setup |
-| Model presets | Yes | No |
-| Mixed precision | Built-in | Manual |
-| Streaming | Built-in | Manual |
-| CLI interface | Yes | No |
-| Export tools | Built-in | External |
+Most people who want to *understand and own* a language model face a choice
+between 500-line research repos and heavyweight frameworks. YouAI gives you a
+clean, modern implementation you can actually read, with the ergonomics of a
+high-level library.
+
+| | YouAI | Typical from-scratch repo | Heavy framework |
+|---|:---:|:---:|:---:|
+| Lines to train a model | **~5** | 200+ | 50–100 |
+| Modern architecture (RoPE, RMSNorm, SwiGLU, GQA) | ✅ built-in | sometimes | ✅ |
+| Fused / flash attention | ✅ automatic | rare | ✅ |
+| KV-cache generation | ✅ | rare | ✅ |
+| Mixed precision (fp16/bf16) | ✅ one flag | manual | ✅ |
+| Streaming generation | ✅ built-in | ✗ | manual |
+| One-command CLI | ✅ | ✗ | partial |
+| Export (ONNX / TorchScript / quantized) | ✅ | ✗ | external |
+| Readable, documented, **tested** | ✅ 45 tests | ✗ | large surface |
 
 ## Installation
 
 ```bash
-pip install -e .
-# or
-pip install -r requirements.txt
+pip install -e .          # core (torch + transformers)
+pip install -e ".[all]"   # + datasets, onnx, wandb, web, dev tools
 ```
 
-## Quick Start (5 lines)
+## Quick start
 
 ```python
 import youai
 
+youai.set_seed(42)
+
+# 1. Create a modern transformer (RoPE + RMSNorm + SwiGLU, weights tied)
 model = youai.create_model("125m")
-train_file, val_file = youai.download_dataset("tinystories")
-youai.train(model, train_file=train_file, epochs=1)
-result = youai.generate("Hello world", checkpoint_path="./checkpoints/final")
+
+# 2. Get some data (synthetic sample, your own files, or a HuggingFace dataset)
+train_file, val_file = youai.create_sample_data(2000)
+# train_file, val_file = youai.download_dataset("tinystories", num_examples=50_000)
+
+# 3. Train — mixed precision, packing, warmup+cosine schedule handled for you
+youai.train(model, train_file, val_file, epochs=1, mixed_precision="bf16")
+
+# 4. Generate
+print(youai.generate("The future of AI", checkpoint_path="./checkpoints/final")[0])
+
+# 5. Chat / stream
+bot = youai.load_model("./checkpoints/final")
+print(bot.chat("Hello!"))
+for piece in youai.stream_generate("./checkpoints/final", prompt="Once upon a time"):
+    print(piece, end="", flush=True)
 ```
 
-## Features
-
-### Model Presets
-
-```python
-model = youai.create_model("125m")   # 125M params - testing
-model = youai.create_model("350m")   # 350M params - real apps
-model = youai.create_model("750m")   # 750M params - strong
-model = youai.create_model("2b")     # 2B params - production
-```
-
-### HuggingFace Datasets
-
-```python
-train_file, val_file = youai.download_dataset("tinystories")    # ~2GB, fast
-train_file, val_file = youai.download_dataset("wikipedia")      # ~500MB
-train_file, val_file = youai.download_dataset("openwebtext")    # ~40GB
-```
-
-### Advanced Training
-
-```python
-# Mixed precision (2x faster)
-youai.train(model, train_file, mixed_precision="fp16")
-
-# Gradient checkpointing (50% less memory)
-youai.train(model, train_file, gradient_checkpointing=True)
-
-# Resume from checkpoint
-youai.train(model, train_file, resume_from="./checkpoints/epoch-2")
-```
-
-### Streaming Generation
-
-```python
-for token in youai.stream_generate("./checkpoints/final", prompt="Hello"):
-    print(token, end="", flush=True)
-```
-
-### Chat Sessions
-
-```python
-from youai.streaming import ChatSession
-
-session = ChatSession(model, tokenizer)
-for token in session.chat_stream("Tell me a story"):
-    print(token, end="", flush=True)
-```
-
-### Model Export
-
-```python
-youai.export_onnx(model, "model.onnx")           # ONNX format
-youai.export_quantized(model, "quantized")        # INT8 quantization
-```
-
-### Training Estimation
-
-```python
-estimates = youai.estimate_training(model, dataset_size=100000)
-print(f"Time: {estimates['estimated_time_hours']} hours")
-print(f"Cost: ${estimates['estimated_cost_usd']}")
-```
-
-### CLI Interface
+## Command line
 
 ```bash
-# Train
-youai train --preset 125m --dataset tinystories --epochs 3
-
-# Generate
+youai info --preset 125m                      # architecture + parameter count
+youai datasets                                # list dataset presets
+youai train --preset 125m --dataset tinystories --epochs 3 --mixed-precision bf16
 youai generate --checkpoint ./checkpoints/final --prompt "Hello"
-
-# Chat
 youai chat --checkpoint ./checkpoints/final
-
-# Export
 youai export --checkpoint ./checkpoints/final --format onnx
-
-# Benchmark
 youai benchmark --checkpoint ./checkpoints/final
 ```
 
-## What Makes YouAI Different?
+## Model presets
 
-### 1. Simplicity
+| Preset | Parameters | Notes |
+|--------|-----------:|-------|
+| `nano`  | ~7.5M   | Tiny — unit tests & laptop experiments |
+| `micro` | ~19M    | Quick smoke training |
+| `125m`  | ~152M   | Great starting point |
+| `350m`  | ~454M   | |
+| `750m`  | ~983M   | |
+| `1.3b`  | ~1.7B   | |
+| `2b`    | ~3.5B   | Requires a serious GPU |
+
+Every preset defaults to a modern architecture. Pass `modern=False` for a
+classic GPT-2 style model, or override any field:
 
 ```python
-# YouAI (5 lines)
-import youai
-model = youai.create_model("125m")
-train_file, _ = youai.download_dataset("tinystories")
-youai.train(model, train_file=train_file)
-result = youai.generate("Hello", checkpoint_path="./checkpoints/final")
-
-# HuggingFace (50+ lines)
-from transformers import GPT2LMHeadModel, GPT2Tokenizer, Trainer, TrainingArguments
-from datasets import load_dataset
-# ... many more lines of setup
+model = youai.create_model("125m", num_key_value_heads=4, activation="gelu")
 ```
 
-### 2. Full Ownership
+## Feature highlights
 
-- No API costs
-- No rate limits
-- No data leaves your machine
-- Complete control
+- **Modern architecture** — rotary/learned/ALiBi positions, RMSNorm/LayerNorm,
+  SwiGLU/GEGLU/GELU MLPs, grouped-query attention, weight tying.
+- **Fast & memory efficient** — fused scaled-dot-product ("flash") attention,
+  KV-cache decoding, gradient checkpointing, mixed precision.
+- **Correct training** — warmup + cosine/linear schedules, gradient
+  accumulation & clipping, padding masked out of the loss, token packing,
+  best-checkpoint tracking, early stopping, seamless resume.
+- **Great inference** — batch-correct top-k / nucleus sampling, repetition
+  penalty, greedy or sampled decoding, token streaming, chat sessions,
+  perplexity scoring.
+- **Deployment** — ONNX & TorchScript export, int8/fp16 quantization, GGUF
+  metadata, benchmarking.
+- **Quality** — typed, documented, and covered by a 45-test pytest suite.
 
-### 3. Production Ready
+## Testing
 
-- Mixed precision training
-- Gradient checkpointing
-- ONNX export
-- Model quantization
-- Streaming support
+```bash
+pip install -e ".[dev]"
+pytest
+```
 
-### 4. Educational
-
-- Clean source code
-- Learn how LLMs work
-- Understand training
-- Experiment freely
+The suite runs in seconds on CPU and needs no GPU.
 
 ## Documentation
 
-See [DOCUMENTATION.md](DOCUMENTATION.md) for complete documentation.
-
-## Project Structure
-
-```
-youai/
-├── __init__.py              # Main API
-├── config.py                # Model configurations
-├── model.py                 # Model architecture
-├── trainer.py               # Basic trainer
-├── training_advanced.py     # Advanced training features
-├── inference.py             # Inference utilities
-├── streaming.py             # Streaming generation
-├── export.py                # Model export tools
-├── data.py                  # Data preparation
-├── cli.py                   # Command line interface
-├── setup.py                 # Package setup
-├── DOCUMENTATION.md         # Full documentation
-└── README.md                # This file
-```
-
-## Use Cases
-
-### Learning & Education
-```python
-model = youai.create_model("125m")
-# Train on small dataset to understand how LLMs work
-```
-
-### Domain-Specific Models
-```python
-# Train on your own data
-train_file, _ = youai.prepare_data(["medical_data.txt"])
-model = youai.create_model("350m")
-youai.train(model, train_file=train_file)
-```
-
-### Prototyping
-```python
-# Quick iteration on model ideas
-model = youai.create_model("125m", hidden_size=512, num_hidden_layers=6)
-```
-
-### Production Deployment
-```python
-# Export for production
-youai.export_onnx(model, "model.onnx")
-youai.export_quantized(model, "model_int8")
-```
-
-## Hardware Requirements
-
-| Model | Min GPU | Training Time | Cost |
-|-------|---------|---------------|------|
-| 125M | T4 | 2-3 hours | Free (Colab) |
-| 350M | A100 | 4-6 hours | ~$5-7 |
-| 750M | A100 | 1-2 days | ~$30-50 |
-| 2B | A100 | 2-4 weeks | ~$800-1200 |
+See [`DOCUMENTATION.md`](DOCUMENTATION.md) for the full API reference and
+[`CHANGELOG.md`](CHANGELOG.md) for what changed in 1.0.
 
 ## License
 
-MIT License
-
-## Links
-
-- [Documentation](DOCUMENTATION.md)
-- [Examples](DOCUMENTATION.md#examples)
-- [CLI Reference](DOCUMENTATION.md#cli-reference)
+MIT — see [`LICENSE`](LICENSE).
