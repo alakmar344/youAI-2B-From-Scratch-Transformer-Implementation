@@ -10,7 +10,7 @@ with open(os.path.join(here, "README.md"), "r", encoding="utf-8") as fh:
 
 setup(
     name="youai",
-    version="1.0.0",
+    version="1.1.0",
     author="YouAI Contributors",
     description="Train your own language model from scratch — a small, professional LLM toolkit.",
     long_description=long_description,
@@ -38,7 +38,10 @@ setup(
         "wandb": ["wandb>=0.15.0"],
         "web": ["flask>=3.0.0", "flask-cors>=4.0.0"],
         "onnx": ["onnx>=1.14.0", "onnxruntime>=1.16.0"],
-        "dev": ["pytest>=7.0.0"],
+        "accelerate": ["accelerate>=0.20.0"],
+        "server": ["fastapi>=0.100.0", "uvicorn[standard]>=0.23.0"],
+        "qlora": ["bitsandbytes>=0.41.0", "accelerate>=0.20.0"],
+        "dev": ["pytest>=7.0.0", "httpx>=0.24.0"],
         "all": [
             "datasets>=2.12.0",
             "wandb>=0.15.0",
@@ -46,7 +49,11 @@ setup(
             "flask-cors>=4.0.0",
             "onnx>=1.14.0",
             "onnxruntime>=1.16.0",
+            "accelerate>=0.20.0",
+            "fastapi>=0.100.0",
+            "uvicorn[standard]>=0.23.0",
             "pytest>=7.0.0",
+            "httpx>=0.24.0",
         ],
     },
     entry_points={

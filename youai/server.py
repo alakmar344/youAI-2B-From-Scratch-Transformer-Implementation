@@ -161,12 +161,16 @@ def create_app(checkpoint: Optional[str] = None, device: str = "auto",
 
     streamer = StreamingGenerator(inferencer.model, inferencer.tokenizer, device=device)
 
-    app = FastAPI(title="YouAI Inference Server", version="1.0.0")
+    from contextlib import asynccontextmanager
+
     batcher = MicroBatcher(inferencer, max_batch=max_batch)
 
-    @app.on_event("startup")
-    async def _startup():
+    @asynccontextmanager
+    async def lifespan(app):
         batcher.start()
+        yield
+
+    app = FastAPI(title="YouAI Inference Server", version="1.0.0", lifespan=lifespan)
 
     @app.get("/health")
     async def health():

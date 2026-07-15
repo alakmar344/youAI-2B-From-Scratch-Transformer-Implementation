@@ -9,6 +9,10 @@ Complete reference for the YouAI library (v1.0).
 - [Configuration](#configuration)
 - [Data pipeline](#data-pipeline)
 - [Training](#training)
+- [Pretrained GPT-2 weights](#pretrained-gpt-2-weights)
+- [LoRA / QLoRA fine-tuning](#lora--qlora-fine-tuning)
+- [Multi-GPU training](#multi-gpu-training)
+- [Inference server](#inference-server)
 - [Generation & inference](#generation--inference)
 - [Streaming & chat](#streaming--chat)
 - [Export & quantization](#export--quantization)
@@ -194,6 +198,97 @@ trainer.load_checkpoint("./checkpoints/step-500")
 trainer.train()
 ```
 
+## Pretrained GPT-2 weights
+
+```python
+model = youai.from_pretrained_gpt2("gpt2")   # gpt2, gpt2-medium, gpt2-large, gpt2-xl, distilgpt2
+```
+
+The loader maps HuggingFace's fused ``c_attn`` QKV matrix and ``Conv1D`` weight
+layout into YouAI's parameters and uses the ``gelu_new`` activation, so the
+result is **numerically identical** to HuggingFace (the test suite asserts
+token-for-token identical greedy decoding). From here you can generate, evaluate
+perplexity, export, or fine-tune with LoRA.
+
+## LoRA / QLoRA fine-tuning
+
+LoRA freezes the base model and trains tiny rank-``r`` adapters, so you can adapt
+a real model training well under 1% of its parameters.
+
+```python
+model = youai.from_pretrained_gpt2("gpt2")
+metrics = youai.train(
+    model, "data.txt", epochs=1,
+    lora=True, lora_r=8, lora_alpha=16, lora_dropout=0.05,
+)
+print(metrics["trainable"])     # {'trainable': ..., 'trainable_percent': 0.47}
+# Saved: <output_dir>/adapter (a few MB) and <output_dir>/merged (deployable)
+```
+
+Lower-level control:
+
+```python
+from youai import apply_lora, merge_lora, save_lora, load_lora
+
+apply_lora(model, r=8, alpha=16, target_modules=("q_proj", "k_proj", "v_proj", "o_proj"))
+# ... train only the adapter params (requires_grad is set for you) ...
+save_lora(model, "my_adapter")     # tiny file
+merge_lora(model)                  # fold adapters into the base for fast inference
+```
+
+**QLoRA** (`youai.train(..., qlora=True)` or `youai.apply_qlora(model)`) keeps the
+frozen base weights in 4-bit using ``bitsandbytes`` on CUDA. Without a GPU /
+bitsandbytes it transparently falls back to standard LoRA (identical adapters).
+
+## Multi-GPU training
+
+YouAI integrates HuggingFace **accelerate**. Enable it with a single flag:
+
+```python
+youai.train(model, "data.txt", use_accelerate=True, mixed_precision="bf16")
+```
+
+Then launch across GPUs/nodes with the accelerate launcher (configure once with
+``accelerate config``):
+
+```bash
+accelerate launch -m youai.cli train --preset 350m --dataset openwebtext \
+    --accelerate --mixed-precision bf16 --batch-size 16 --grad-accum 4
+```
+
+The trainer uses ``accelerator.accumulate`` for correct gradient sync, gathers
+validation loss across processes, and writes checkpoints only from the main
+process (saving the unwrapped model, so checkpoints load into a plain
+``YouAIModel``). For FSDP/DeepSpeed, choose them in ``accelerate config`` — the
+training code is unchanged.
+
+## Inference server
+
+A FastAPI server with streaming and dynamic batching:
+
+```bash
+pip install -e ".[server]"
+youai serve --checkpoint ./checkpoints/final --port 8000
+youai serve --pretrained gpt2 --port 8000        # serve real GPT-2 directly
+```
+
+Endpoints:
+
+| Method & path | Purpose |
+|---------------|---------|
+| `GET /health` | Liveness + model info |
+| `POST /generate` | Batched completion (`{prompt, max_new_tokens, temperature, ...}`) |
+| `POST /chat` | Single-turn chat with history |
+| `POST /generate/stream` | Server-Sent-Events token stream |
+| `POST /v1/completions` | OpenAI-compatible shim |
+
+Concurrent `/generate` requests are grouped by a **micro-batcher** and run in one
+forward pass — the main throughput win under load. From Python:
+
+```python
+youai.serve(checkpoint="./checkpoints/final", port=8000, max_batch=8)
+```
+
 ## Generation & inference
 
 ```python
@@ -249,10 +344,12 @@ previous dict-returning `forward` could not be traced.
 ```
 youai info [--preset NAME] [--classic]
 youai datasets
-youai train --preset 125m [--dataset tinystories | --data FILE]
+youai train [--preset 125m | --pretrained gpt2] [--dataset tinystories | --data FILE]
             [--epochs N] [--batch-size N] [--grad-accum N]
+            [--lora] [--qlora] [--lora-r N] [--accelerate]
             [--mixed-precision fp16|bf16] [--gradient-checkpointing]
             [--no-packing] [--resume DIR] [--estimate] [--seed N]
+youai serve (--checkpoint DIR | --pretrained gpt2) [--port N] [--max-batch N]
 youai generate --checkpoint DIR --prompt TEXT [--max-new-tokens N]
                [--temperature F] [--top-k N] [--top-p F]
                [--repetition-penalty F] [--num-sequences N]
@@ -284,5 +381,13 @@ or call `trainer.load_checkpoint(dir)`.
 `youai.prepare_data([...])`, or point `youai.train` at a plain text file (one
 example per line).
 
-**Is it tested?** Yes — `pytest` runs 45 tests covering config, model,
-generation, data, trainer and inference, all on CPU with no network.
+**Can I fine-tune real GPT-2?** Yes:
+`model = youai.from_pretrained_gpt2("gpt2")` then
+`youai.train(model, "data.txt", lora=True)`.
+
+**Do I need bitsandbytes for LoRA?** No — plain LoRA is pure PyTorch. Only QLoRA's
+4-bit base needs bitsandbytes + CUDA, and it falls back to LoRA without them.
+
+**Is it tested?** Yes — `pytest` runs 61 tests covering config, model,
+generation, data, trainer, inference, LoRA, GPT-2 loading and the HTTP server,
+all on CPU. The GPT-2 and tokenizer tests skip automatically if offline.

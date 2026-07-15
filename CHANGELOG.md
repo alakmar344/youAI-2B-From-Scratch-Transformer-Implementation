@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.1.0
+
+The "make it usable for real work" release: four features that turn YouAI from a
+correct-but-academic library into one a practitioner can actually adopt.
+
+### Added
+- **Pretrained GPT-2 loading** — `youai.from_pretrained_gpt2("gpt2" | "gpt2-medium"
+  | "gpt2-large" | "gpt2-xl" | "distilgpt2")` maps HuggingFace weights (fused
+  `c_attn` QKV split + `Conv1D` transpose) into a YouAIModel. Adds the `gelu_new`
+  activation; output is **token-for-token identical to HuggingFace** (asserted in
+  tests). This also validates the whole architecture is exactly correct.
+- **LoRA / QLoRA fine-tuning** (`youai.lora`) — `LoRALinear`, `apply_lora`,
+  `apply_qlora`, `merge_lora`, `save_lora`, `load_lora`. `youai.train(model, ...,
+  lora=True)` fine-tunes <1% of parameters, saving a few-MB adapter plus a merged
+  deployable checkpoint. QLoRA uses bitsandbytes 4-bit on CUDA, falling back to
+  LoRA otherwise.
+- **Multi-GPU training via accelerate** — `TrainingConfig(use_accelerate=True)` /
+  `youai.train(..., use_accelerate=True)`. Correct gradient sync
+  (`accelerator.accumulate`), cross-process metric gathering, main-process
+  checkpointing of the unwrapped model. FSDP/DeepSpeed via `accelerate config`.
+- **FastAPI inference server** (`youai.server`, `youai.serve`, `youai serve`) —
+  `/health`, `/generate`, `/chat`, SSE `/generate/stream`, OpenAI-style
+  `/v1/completions`, and a dynamic micro-batcher fusing concurrent requests.
+  `YouAIInference.generate_batch` adds correct left-padded batched decoding.
+- CLI: `--pretrained`, `--lora`, `--qlora`, `--lora-r`, `--accelerate` on `train`;
+  new `serve` command. New extras: `server`, `accelerate`, `qlora`.
+- 16 new tests (61 total) for LoRA, GPT-2 loading and the HTTP server.
+
 ## 1.0.0
 
 A ground-up rewrite of the core library: modern architecture, correctness fixes
