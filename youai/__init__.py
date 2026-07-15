@@ -20,6 +20,20 @@ Quick Start:
     # Generate text
     result = youai.generate("Hello world", checkpoint_path="./checkpoints/final")
     print(result)
+
+Advanced Features:
+    # Mixed precision training (2x faster on modern GPUs)
+    youai.train(model, train_file, mixed_precision="fp16")
+    
+    # Streaming generation
+    for token in youai.stream_generate(model, tokenizer, "Hello"):
+        print(token, end="")
+    
+    # Export model
+    youai.export_onnx(model, "model.onnx")
+    
+    # CLI usage
+    # youai train --preset 125m --dataset tinystories --epochs 3
 """
 
 from typing import List
@@ -37,8 +51,9 @@ from .data import (
     list_datasets,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
+    # Core functions
     "create_model",
     "train",
     "generate",
@@ -47,6 +62,22 @@ __all__ = [
     "download_dataset",
     "list_datasets",
     "load_model",
+    
+    # Advanced training
+    "train_advanced",
+    "estimate_training",
+    "find_learning_rate",
+    
+    # Export
+    "export_onnx",
+    "export_quantized",
+    "benchmark_model",
+    
+    # Streaming
+    "stream_generate",
+    "ChatSession",
+    
+    # Classes
     "YouAIConfig",
     "YouAIModel",
     "YouAIInference",
@@ -131,6 +162,9 @@ def train(
     max_length: int = 512,
     output_dir: str = "./checkpoints",
     device: str = "cuda",
+    mixed_precision: str = None,
+    gradient_checkpointing: bool = False,
+    resume_from: str = None,
     **kwargs,
 ) -> None:
     """Train a YouAI model.
@@ -144,13 +178,21 @@ def train(
         learning_rate: Learning rate
         max_length: Maximum sequence length
         output_dir: Directory for checkpoints
-        device: Device to use ('cuda' or 'cpu')
+        device: Device to use ('cuda', 'cpu', or 'auto')
+        mixed_precision: Enable mixed precision ('fp16', 'bf16', or None)
+        gradient_checkpointing: Enable gradient checkpointing (saves memory)
+        resume_from: Resume training from checkpoint path
         **kwargs: Additional Trainer parameters
         
     Examples:
         model = youai.create_model("125m")
         youai.train(model, train_file="data/train.txt", epochs=1)
+        
+        # Advanced training with mixed precision
+        youai.train(model, train_file, mixed_precision="fp16", gradient_checkpointing=True)
     """
+    from .training_advanced import MixedPrecisionTrainer, TrainingConfig
+    
     train_dataloader, val_dataloader = create_dataloaders(
         train_file=train_file,
         val_file=val_file,
@@ -159,18 +201,106 @@ def train(
         device=device,
     )
     
-    trainer = Trainer(
+    config = TrainingConfig(
+        mixed_precision=mixed_precision,
+        gradient_checkpointing=gradient_checkpointing,
+    )
+    
+    trainer = MixedPrecisionTrainer(
         model=model,
         train_dataloader=train_dataloader,
         val_dataloader=val_dataloader,
+        config=config,
         learning_rate=learning_rate,
         num_epochs=epochs,
         output_dir=output_dir,
         device=device,
-        **kwargs,
     )
     
+    if resume_from:
+        trainer.load_checkpoint(resume_from)
+    
     trainer.train()
+
+
+def train_advanced(
+    model: YouAIModel,
+    train_dataloader,
+    val_dataloader=None,
+    config=None,
+    **kwargs,
+):
+    """Advanced training with full control.
+    
+    Args:
+        model: YouAIModel instance
+        train_dataloader: Training DataLoader
+        val_dataloader: Validation DataLoader (optional)
+        config: TrainingConfig instance
+        **kwargs: Additional trainer parameters
+        
+    Returns:
+        MixedPrecisionTrainer instance
+    """
+    from .training_advanced import MixedPrecisionTrainer
+    
+    trainer = MixedPrecisionTrainer(
+        model=model,
+        train_dataloader=train_dataloader,
+        val_dataloader=val_dataloader,
+        config=config,
+        **kwargs,
+    )
+    return trainer
+
+
+def estimate_training(
+    model: YouAIModel,
+    dataset_size: int,
+    batch_size: int = 8,
+    num_epochs: int = 3,
+) -> dict:
+    """Estimate training time and resource requirements.
+    
+    Args:
+        model: YouAIModel instance
+        dataset_size: Number of training examples
+        batch_size: Batch size
+        num_epochs: Number of epochs
+        
+    Returns:
+        Dictionary with estimates
+        
+    Examples:
+        model = youai.create_model("125m")
+        estimates = youai.estimate_training(model, dataset_size=100000)
+        print(f"Estimated time: {estimates['estimated_time_hours']} hours")
+    """
+    from .training_advanced import estimate_training_time
+    return estimate_training_time(model, dataset_size, batch_size, num_epochs)
+
+
+def find_learning_rate(
+    model: YouAIModel,
+    train_dataloader,
+    **kwargs,
+) -> float:
+    """Find optimal learning rate.
+    
+    Args:
+        model: YouAIModel instance
+        train_dataloader: Training DataLoader
+        
+    Returns:
+        Suggested learning rate
+        
+    Examples:
+        lr = youai.find_learning_rate(model, train_loader)
+        youai.train(model, train_file, learning_rate=lr)
+    """
+    from .training_advanced import LearningRateFinder
+    finder = LearningRateFinder(model, train_dataloader, **kwargs)
+    return finder.find()
 
 
 def generate(
@@ -213,6 +343,49 @@ def generate(
     )
 
 
+def stream_generate(
+    model_or_checkpoint,
+    tokenizer=None,
+    prompt: str = "",
+    max_length: int = 100,
+    temperature: float = 0.8,
+    device: str = "auto",
+):
+    """Stream generated tokens one by one.
+    
+    Args:
+        model_or_checkpoint: YouAIModel or path to checkpoint
+        tokenizer: Tokenizer (required if model_or_checkpoint is a model)
+        prompt: Input text
+        max_length: Maximum tokens to generate
+        temperature: Sampling temperature
+        device: Device to use
+        
+    Yields:
+        Generated tokens one at a time
+        
+    Examples:
+        # From checkpoint
+        for token in youai.stream_generate("./checkpoints/final", prompt="Hello"):
+            print(token, end="", flush=True)
+        
+        # From model
+        for token in youai.stream_generate(model, tokenizer, "Hello"):
+            print(token, end="", flush=True)
+    """
+    from .streaming import StreamingGenerator
+    
+    if isinstance(model_or_checkpoint, str):
+        inferencer = YouAIInference(model_or_checkpoint, device=device)
+        model = inferencer.model
+        tokenizer = inferencer.tokenizer
+    else:
+        model = model_or_checkpoint
+    
+    generator = StreamingGenerator(model, tokenizer, device=device)
+    yield from generator.stream(prompt, max_length=max_length, temperature=temperature)
+
+
 def load_model(checkpoint_path: str, device: str = "cuda") -> YouAIInference:
     """Load a trained model for inference.
     
@@ -229,3 +402,56 @@ def load_model(checkpoint_path: str, device: str = "cuda") -> YouAIInference:
         chat_response = model.chat("How are you?")
     """
     return YouAIInference(checkpoint_path, device=device)
+
+
+def export_onnx(model: YouAIModel, output_path: str, **kwargs) -> str:
+    """Export model to ONNX format.
+    
+    Args:
+        model: YouAIModel instance
+        output_path: Path to save ONNX model
+        
+    Returns:
+        Path to exported model
+        
+    Examples:
+        youai.export_onnx(model, "model.onnx")
+    """
+    from .export import ModelExporter
+    exporter = ModelExporter(model)
+    return exporter.export_onnx(output_path, **kwargs)
+
+
+def export_quantized(model: YouAIModel, output_dir: str, dtype: str = "qint8") -> None:
+    """Export quantized model for faster inference.
+    
+    Args:
+        model: YouAIModel instance
+        output_dir: Directory to save quantized model
+        dtype: Quantization type ('qint8' or 'float16')
+        
+    Examples:
+        youai.export_quantized(model, "quantized_model")
+    """
+    from .export import ModelQuantizer
+    quantizer = ModelQuantizer(model)
+    quantized = quantizer.dynamic_quantize(dtype=dtype)
+    quantizer.save(quantized, output_dir)
+
+
+def benchmark_model(model: YouAIModel, device: str = "cpu", **kwargs) -> dict:
+    """Benchmark model inference speed.
+    
+    Args:
+        model: YouAIModel instance
+        device: Device to benchmark on
+        
+    Returns:
+        Dictionary with benchmark results
+        
+    Examples:
+        results = youai.benchmark_model(model)
+        print(f"Tokens/sec: {results['tokens_per_second']}")
+    """
+    from .export import benchmark_model as _benchmark
+    return _benchmark(model, device=device, **kwargs)

@@ -1,224 +1,229 @@
 # YouAI - Train Your Own Language Model From Scratch
 
-A simple, callable library for training and using custom language models.
+A powerful yet simple library for training, using, and deploying custom language models.
+
+## Why YouAI?
+
+| Feature | YouAI | Others |
+|---------|-------|--------|
+| Lines of code | 5-10 | 100+ |
+| Learning curve | Low | High |
+| From-scratch training | Built-in | Manual setup |
+| Model presets | Yes | No |
+| Mixed precision | Built-in | Manual |
+| Streaming | Built-in | Manual |
+| CLI interface | Yes | No |
+| Export tools | Built-in | External |
 
 ## Installation
 
 ```bash
-# Install from source
-git clone <repo-url>
-cd youai
 pip install -e .
-
-# Or install dependencies directly
+# or
 pip install -r requirements.txt
 ```
 
-## Quick Start (Notebook / Python Script)
+## Quick Start (5 lines)
 
 ```python
 import youai
 
-# Step 1: Create a model (choose: '125m', '350m', '750m', '2b')
 model = youai.create_model("125m")
-
-# Step 2: Create sample data for testing
-train_file, val_file = youai.create_sample_data(num_examples=1000)
-
-# Step 3: Train the model
-youai.train(model, train_file=train_file, epochs=1, batch_size=4)
-
-# Step 4: Generate text
-results = youai.generate("The future of AI is", checkpoint_path="./checkpoints/final")
-print(results[0])
-```
-
-## Library API
-
-### Create a Model
-
-```python
-import youai
-
-# Use a preset size
-model = youai.create_model("125m")   # 125M parameters
-model = youai.create_model("350m")   # 350M parameters
-model = youai.create_model("750m")   # 750M parameters
-model = youai.create_model("2b")     # 2B parameters
-
-# Customize configuration
-model = youai.create_model("125m", hidden_dropout_prob=0.05, num_hidden_layers=8)
-```
-
-### Prepare Data
-
-```python
-# Create sample data for testing
-train_file, val_file = youai.create_sample_data(num_examples=5000)
-
-# Prepare from your own text files
-train_file, val_file = youai.prepare_data([
-    "path/to/data1.txt",
-    "path/to/data2.txt",
-])
-
-# Download HuggingFace dataset (recommended!)
-train_file, val_file = youai.download_dataset("tinystories")  # Fast, ~2GB
-train_file, val_file = youai.download_dataset("wikipedia")    # Encyclopedia, ~500MB
-train_file, val_file = youai.download_dataset("openwebtext")  # Web text, ~40GB
-
-# List available datasets
-youai.list_datasets()
-```
-
-### Train
-
-```python
-# Train with default settings
-youai.train(model, train_file="data/train.txt")
-
-# Train with custom settings
-youai.train(
-    model,
-    train_file="data/train.txt",
-    val_file="data/val.txt",
-    epochs=3,
-    batch_size=8,
-    learning_rate=3e-4,
-    max_length=512,
-    output_dir="./my_checkpoints",
-)
-```
-
-### Generate Text
-
-```python
-# Generate from a checkpoint
-results = youai.generate(
-    "Once upon a time",
-    checkpoint_path="./checkpoints/final",
-    max_length=200,
-    temperature=0.8,
-)
-
-# Load model for multiple generations
-model = youai.load_model("./checkpoints/final")
-response1 = model.generate("Hello!")
-response2 = model.generate("How are you?")
-
-# Chat mode
-reply = model.chat("What is machine learning?")
-```
-
-### Advanced: Use Classes Directly
-
-```python
-from youai import YouAIConfig, YouAIModel, Trainer, YouAIInference
-
-# Custom configuration
-config = YouAIConfig(
-    hidden_size=1024,
-    num_hidden_layers=16,
-    num_attention_heads=16,
-    intermediate_size=4096,
-)
-
-# Create model
-model = YouAIModel(config)
-
-# Create trainer manually
-trainer = Trainer(
-    model=model,
-    train_dataloader=train_loader,
-    num_epochs=5,
-    learning_rate=1e-4,
-)
-
-# Load checkpoint manually
-inference = YouAIInference("./checkpoints/final")
-```
-
-## Preset Model Sizes
-
-| Preset | Parameters | Hidden Size | Layers | Heads | Best For |
-|--------|-----------|-------------|--------|-------|----------|
-| `125m` | 125M | 768 | 12 | 12 | Learning, testing |
-| `350m` | 350M | 1024 | 24 | 16 | Real applications |
-| `750m` | 750M | 1536 | 24 | 16 | Strong performance |
-| `2b` | 2B | 2048 | 24 | 16 | Production quality |
-
-## HuggingFace Datasets
-
-Download pre-built datasets for training:
-
-| Dataset | Command | Size | Best For |
-|---------|---------|------|----------|
-| **TinyStories** | `youai.download_dataset("tinystories")` | ~2GB | Quick testing, simple text |
-| **Wikipedia** | `youai.download_dataset("wikipedia")` | ~500MB | Encyclopedia knowledge |
-| **OpenWebText** | `youai.download_dataset("openwebtext")` | ~40GB | General web knowledge |
-
-```python
-import youai
-
-# Download TinyStories for quick training (recommended for testing)
 train_file, val_file = youai.download_dataset("tinystories")
-
-# Limit to 50k examples for faster download
-train_file, val_file = youai.download_dataset("tinystories", num_examples=50000)
-
-# Download Wikipedia for knowledge-heavy tasks
-train_file, val_file = youai.download_dataset("wikipedia")
-
-# Then train
-model = youai.create_model("125m")
 youai.train(model, train_file=train_file, epochs=1)
+result = youai.generate("Hello world", checkpoint_path="./checkpoints/final")
 ```
 
-## Command Line Interface
+## Features
 
-The original scripts still work:
+### Model Presets
+
+```python
+model = youai.create_model("125m")   # 125M params - testing
+model = youai.create_model("350m")   # 350M params - real apps
+model = youai.create_model("750m")   # 750M params - strong
+model = youai.create_model("2b")     # 2B params - production
+```
+
+### HuggingFace Datasets
+
+```python
+train_file, val_file = youai.download_dataset("tinystories")    # ~2GB, fast
+train_file, val_file = youai.download_dataset("wikipedia")      # ~500MB
+train_file, val_file = youai.download_dataset("openwebtext")    # ~40GB
+```
+
+### Advanced Training
+
+```python
+# Mixed precision (2x faster)
+youai.train(model, train_file, mixed_precision="fp16")
+
+# Gradient checkpointing (50% less memory)
+youai.train(model, train_file, gradient_checkpointing=True)
+
+# Resume from checkpoint
+youai.train(model, train_file, resume_from="./checkpoints/epoch-2")
+```
+
+### Streaming Generation
+
+```python
+for token in youai.stream_generate("./checkpoints/final", prompt="Hello"):
+    print(token, end="", flush=True)
+```
+
+### Chat Sessions
+
+```python
+from youai.streaming import ChatSession
+
+session = ChatSession(model, tokenizer)
+for token in session.chat_stream("Tell me a story"):
+    print(token, end="", flush=True)
+```
+
+### Model Export
+
+```python
+youai.export_onnx(model, "model.onnx")           # ONNX format
+youai.export_quantized(model, "quantized")        # INT8 quantization
+```
+
+### Training Estimation
+
+```python
+estimates = youai.estimate_training(model, dataset_size=100000)
+print(f"Time: {estimates['estimated_time_hours']} hours")
+print(f"Cost: ${estimates['estimated_cost_usd']}")
+```
+
+### CLI Interface
 
 ```bash
-# Prepare data interactively
-python prepare_data.py
+# Train
+youai train --preset 125m --dataset tinystories --epochs 3
 
-# Train model
-python train.py
+# Generate
+youai generate --checkpoint ./checkpoints/final --prompt "Hello"
 
-# Run inference
-python inference.py --checkpoint ./youai_checkpoints/final --mode chat
+# Chat
+youai chat --checkpoint ./checkpoints/final
 
-# Start web interface
-python web_interface.py --checkpoint ./youai_checkpoints/final --port 5000
+# Export
+youai export --checkpoint ./checkpoints/final --format onnx
+
+# Benchmark
+youai benchmark --checkpoint ./checkpoints/final
 ```
 
-## Hardware Requirements
+## What Makes YouAI Different?
 
-| Model | Min GPU | Training Time | Cost Estimate |
-|-------|---------|---------------|---------------|
-| 125M | T4 (16GB) | 2-3 days | $50-100 |
-| 350M | A100 (40GB) | 5-7 days | $200-400 |
-| 750M | A100 (40GB) | 10-14 days | $400-800 |
-| 2B | A100 (80GB) | 2-4 weeks | $1000-4000 |
+### 1. Simplicity
+
+```python
+# YouAI (5 lines)
+import youai
+model = youai.create_model("125m")
+train_file, _ = youai.download_dataset("tinystories")
+youai.train(model, train_file=train_file)
+result = youai.generate("Hello", checkpoint_path="./checkpoints/final")
+
+# HuggingFace (50+ lines)
+from transformers import GPT2LMHeadModel, GPT2Tokenizer, Trainer, TrainingArguments
+from datasets import load_dataset
+# ... many more lines of setup
+```
+
+### 2. Full Ownership
+
+- No API costs
+- No rate limits
+- No data leaves your machine
+- Complete control
+
+### 3. Production Ready
+
+- Mixed precision training
+- Gradient checkpointing
+- ONNX export
+- Model quantization
+- Streaming support
+
+### 4. Educational
+
+- Clean source code
+- Learn how LLMs work
+- Understand training
+- Experiment freely
+
+## Documentation
+
+See [DOCUMENTATION.md](DOCUMENTATION.md) for complete documentation.
 
 ## Project Structure
 
 ```
 youai/
-├── __init__.py          # Main package interface
-├── config.py            # Model configurations
-├── model.py             # Model architecture
-├── trainer.py           # Training loop
-├── inference.py         # Inference utilities
-├── data.py              # Data preparation utilities
-├── setup.py             # Package installation
-├── requirements.txt     # Dependencies
-├── train.py             # Legacy training script
-├── inference.py         # Legacy inference script
-├── prepare_data.py      # Legacy data preparation script
-└── web_interface.py     # Web UI
+├── __init__.py              # Main API
+├── config.py                # Model configurations
+├── model.py                 # Model architecture
+├── trainer.py               # Basic trainer
+├── training_advanced.py     # Advanced training features
+├── inference.py             # Inference utilities
+├── streaming.py             # Streaming generation
+├── export.py                # Model export tools
+├── data.py                  # Data preparation
+├── cli.py                   # Command line interface
+├── setup.py                 # Package setup
+├── DOCUMENTATION.md         # Full documentation
+└── README.md                # This file
 ```
+
+## Use Cases
+
+### Learning & Education
+```python
+model = youai.create_model("125m")
+# Train on small dataset to understand how LLMs work
+```
+
+### Domain-Specific Models
+```python
+# Train on your own data
+train_file, _ = youai.prepare_data(["medical_data.txt"])
+model = youai.create_model("350m")
+youai.train(model, train_file=train_file)
+```
+
+### Prototyping
+```python
+# Quick iteration on model ideas
+model = youai.create_model("125m", hidden_size=512, num_hidden_layers=6)
+```
+
+### Production Deployment
+```python
+# Export for production
+youai.export_onnx(model, "model.onnx")
+youai.export_quantized(model, "model_int8")
+```
+
+## Hardware Requirements
+
+| Model | Min GPU | Training Time | Cost |
+|-------|---------|---------------|------|
+| 125M | T4 | 2-3 hours | Free (Colab) |
+| 350M | A100 | 4-6 hours | ~$5-7 |
+| 750M | A100 | 1-2 days | ~$30-50 |
+| 2B | A100 | 2-4 weeks | ~$800-1200 |
 
 ## License
 
 MIT License
+
+## Links
+
+- [Documentation](DOCUMENTATION.md)
+- [Examples](DOCUMENTATION.md#examples)
+- [CLI Reference](DOCUMENTATION.md#cli-reference)
