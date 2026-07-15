@@ -46,3 +46,8 @@ wandb/
 # OS
 .DS_Store
 Thumbs.db
+
+# Test / build artifacts
+.pytest_cache/
+*.egg-info/
+get-pip.py
