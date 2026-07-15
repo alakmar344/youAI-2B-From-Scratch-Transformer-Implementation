@@ -30,6 +30,11 @@ from .trainer import Trainer, TrainingConfig, estimate_training_time
 from .inference import YouAIInference
 from .streaming import StreamingGenerator, ChatSession
 from .tokenizer import get_tokenizer
+from .pretrained import from_pretrained_gpt2, GPT2_VARIANTS
+from .lora import (
+    apply_lora, apply_qlora, merge_lora, save_lora, load_lora,
+    trainable_parameter_summary, LoRALinear,
+)
 from .utils import set_seed, resolve_device, get_logger, set_log_level, format_count
 from .data import (
     TextDataset,
@@ -47,11 +52,15 @@ __version__ = "1.0.0"
 
 __all__ = [
     # High-level functions
-    "create_model", "train", "generate", "load_model", "chat",
+    "create_model", "from_pretrained_gpt2", "train", "generate", "load_model", "chat",
     "create_sample_data", "prepare_data", "download_dataset", "list_datasets",
     "list_presets", "estimate_training", "find_learning_rate",
     "stream_generate", "export_onnx", "export_quantized", "benchmark_model",
     "set_seed", "set_log_level",
+    # Pretrained + LoRA
+    "from_pretrained_gpt2", "GPT2_VARIANTS",
+    "apply_lora", "apply_qlora", "merge_lora", "save_lora", "load_lora",
+    "trainable_parameter_summary", "LoRALinear", "serve",
     # Classes / config
     "YouAIConfig", "YouAIModel", "YouAIInference", "Trainer", "TrainingConfig",
     "GenerationConfig", "StreamingGenerator", "ChatSession",
@@ -108,12 +117,32 @@ def train(
     gradient_accumulation_steps: int = 1,
     packing: bool = True,
     resume_from: Optional[str] = None,
+    lora: bool = False,
+    qlora: bool = False,
+    lora_r: int = 8,
+    lora_alpha: int = 16,
+    lora_dropout: float = 0.05,
+    lora_target_modules: Optional[list] = None,
     **kwargs,
 ) -> dict:
-    """Train a model end-to-end and return final metrics.
+    """Train (or fine-tune) a model end-to-end and return final metrics.
+
+    Set ``lora=True`` (or ``qlora=True``) for parameter-efficient fine-tuning of
+    a pretrained model — e.g. ``youai.from_pretrained_gpt2("gpt2")``. When LoRA
+    is used, the adapter is saved to ``<output_dir>/adapter`` and a merged,
+    ready-to-deploy checkpoint to ``<output_dir>/merged``.
 
     Any extra keyword arguments are passed through to :class:`TrainingConfig`.
     """
+    if lora or qlora:
+        from .lora import apply_lora, apply_qlora, merge_lora, save_lora, trainable_parameter_summary
+
+        target = tuple(lora_target_modules) if lora_target_modules else None
+        kw = dict(r=lora_r, alpha=lora_alpha, dropout=lora_dropout)
+        if target:
+            kw["target_modules"] = target
+        (apply_qlora if qlora else apply_lora)(model, **kw)
+
     train_loader, val_loader = create_dataloaders(
         train_file=train_file, val_file=val_file, batch_size=batch_size,
         max_length=max_length, device=device, packing=packing,
@@ -127,7 +156,20 @@ def train(
     trainer = Trainer(model, train_loader, val_loader, config, device=device)
     if resume_from:
         trainer.load_checkpoint(resume_from)
-    return trainer.train()
+    metrics = trainer.train()
+
+    if lora or qlora:
+        from .lora import merge_lora, save_lora, trainable_parameter_summary
+        import os
+
+        metrics["trainable"] = trainable_parameter_summary(model)
+        save_lora(model, os.path.join(output_dir, "adapter"),
+                  meta={"r": lora_r, "alpha": lora_alpha})
+        merge_lora(model)
+        model.save_pretrained(os.path.join(output_dir, "merged"))
+        metrics["adapter_dir"] = os.path.join(output_dir, "adapter")
+        metrics["merged_dir"] = os.path.join(output_dir, "merged")
+    return metrics
 
 
 def estimate_training(model: YouAIModel, dataset_size: int, batch_size: int = 8,

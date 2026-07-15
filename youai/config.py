@@ -13,7 +13,7 @@ from typing import Any, Dict
 
 
 # Activation / normalisation / positional-embedding choices we support.
-_ACTIVATIONS = {"gelu", "relu", "silu", "swiglu", "geglu"}
+_ACTIVATIONS = {"gelu", "gelu_new", "relu", "silu", "swiglu", "geglu"}
 _NORMS = {"layernorm", "rmsnorm"}
 _POS_EMB = {"learned", "rotary", "alibi"}
 

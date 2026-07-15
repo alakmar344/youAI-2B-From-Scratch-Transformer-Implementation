@@ -219,7 +219,12 @@ class Attention(nn.Module):
 # ----------------------------------------------------------------------
 # Feed-forward
 # ----------------------------------------------------------------------
-_ACT_FNS = {"gelu": F.gelu, "relu": F.relu, "silu": F.silu}
+def _gelu_new(x: torch.Tensor) -> torch.Tensor:
+    """GELU with the tanh approximation (GPT-2's ``gelu_new``)."""
+    return F.gelu(x, approximate="tanh")
+
+
+_ACT_FNS = {"gelu": F.gelu, "gelu_new": _gelu_new, "relu": F.relu, "silu": F.silu}
 
 
 class FeedForward(nn.Module):
