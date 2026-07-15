@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "youai"
-version = "1.1.0"
-description = "Train your own language model from scratch — a small, professional LLM toolkit."
+version = "2.0.0"
+description = "Load, fine-tune, and serve any open-source LLM — 15 model families, LoRA, multi-GPU, inference server."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "YouAI Contributors" }]
-keywords = ["llm", "transformer", "language-model", "pytorch", "gpt", "training"]
+keywords = ["llm", "transformer", "language-model", "pytorch", "gpt", "llama", "qwen", "mistral", "lora", "training"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -29,6 +29,7 @@ datasets = ["datasets>=2.12.0"]
 wandb = ["wandb>=0.15.0"]
 web = ["flask>=3.0.0", "flask-cors>=4.0.0"]
 onnx = ["onnx>=1.14.0", "onnxruntime>=1.16.0"]
+safetensors = ["safetensors>=0.3.0"]
 accelerate = ["accelerate>=0.20.0"]
 server = ["fastapi>=0.100.0", "uvicorn[standard]>=0.23.0"]
 qlora = ["bitsandbytes>=0.41.0", "accelerate>=0.20.0"]
@@ -40,6 +41,7 @@ all = [
     "flask-cors>=4.0.0",
     "onnx>=1.14.0",
     "onnxruntime>=1.16.0",
+    "safetensors>=0.3.0",
     "accelerate>=0.20.0",
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.23.0",

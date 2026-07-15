@@ -8,6 +8,9 @@ Two dataset strategies are provided:
 * :class:`PackedTextDataset` — concatenates the whole corpus into one token
   stream and slices it into contiguous, fully-utilised blocks.  This is how
   modern LMs are trained and wastes no compute on padding.
+
+Includes 20 curated HuggingFace dataset presets for from-scratch training,
+fine-tuning, and evaluation.
 """
 
 from __future__ import annotations
@@ -25,14 +28,20 @@ from .utils import get_logger
 logger = get_logger()
 
 
-# Curated HuggingFace datasets that work well for from-scratch training.
+# ======================================================================
+# Curated HuggingFace datasets
+# ======================================================================
+# Each entry has: name, subconfig (optional), description, size, split,
+# text_column, and category (pretrain, finetune, code, science, chat).
 DATASET_PRESETS = {
+    # ---- General pre-training ----
     "tinystories": {
         "name": "roneneldan/TinyStories",
         "description": "Simple short stories — ideal for fast experiments and testing.",
         "size": "~2GB",
         "split": "train",
         "text_column": "text",
+        "category": "pretrain",
     },
     "wikipedia": {
         "name": "wikitext",
@@ -41,6 +50,7 @@ DATASET_PRESETS = {
         "size": "~500MB",
         "split": "train",
         "text_column": "text",
+        "category": "pretrain",
     },
     "openwebtext": {
         "name": "Skylion007/openwebtext",
@@ -48,17 +58,174 @@ DATASET_PRESETS = {
         "size": "~40GB",
         "split": "train",
         "text_column": "text",
+        "category": "pretrain",
     },
+    "c4": {
+        "name": "allenai/c4",
+        "subconfig": "en",
+        "description": "Colossal Clean Crawled Corpus — cleaned web text used to train T5.",
+        "size": "~750GB (stream)",
+        "split": "train",
+        "text_column": "text",
+        "category": "pretrain",
+    },
+    "slimpajama": {
+        "name": "cerebras/SlimPajama-627B",
+        "description": "Cleaned, deduplicated RedPajama — high-quality web-scale corpus.",
+        "size": "~627GB (stream)",
+        "split": "train",
+        "text_column": "text",
+        "category": "pretrain",
+    },
+    "redpajama": {
+        "name": "togethercomputer/RedPajama-Data-1T",
+        "description": "1T token open reproduction of LLaMA training data.",
+        "size": "~1TB (stream)",
+        "split": "train",
+        "text_column": "text",
+        "category": "pretrain",
+    },
+    "the_pile": {
+        "name": "EleutherAI/the_pile",
+        "description": "800GB diverse text corpus used to train GPT-NeoX, Pythia.",
+        "size": "~800GB (stream)",
+        "split": "train",
+        "text_column": "text",
+        "category": "pretrain",
+    },
+    "oscar": {
+        "name": "oscar-corpus/OSCAR-2301",
+        "subconfig": "en",
+        "description": "Open Super-large Crawled ALMAnaCH corpus — multilingual web text.",
+        "size": "~100GB (stream)",
+        "split": "train",
+        "text_column": "text",
+        "category": "pretrain",
+    },
+    "bookcorpus": {
+        "name": "bookcorpus/bookcorpus",
+        "description": "Over 11,000 books — narrative prose for language understanding.",
+        "size": "~5GB",
+        "split": "train",
+        "text_column": "text",
+        "category": "pretrain",
+    },
+
+    # ---- Code ----
     "code": {
         "name": "codeparrot/codeparrot-clean-valid",
         "description": "Clean Python source code — for training a code model.",
         "size": "~2GB",
         "split": "train",
         "text_column": "content",
+        "category": "code",
+    },
+    "codesearchnet": {
+        "name": "code_search_net",
+        "subconfig": "python",
+        "description": "6M Python docstrings + code from GitHub.",
+        "size": "~3GB",
+        "split": "train",
+        "text_column": "func_code_string",
+        "category": "code",
+    },
+    "stackexchange": {
+        "name": "HuggingFaceFW/fineweb-edu",
+        "subconfig": "default",
+        "description": "FineWeb-Edu — high-quality educational web pages.",
+        "size": "~1.3TB (stream)",
+        "split": "train",
+        "text_column": "text",
+        "category": "pretrain",
+    },
+
+    # ---- Instruction / fine-tuning ----
+    "alpaca": {
+        "name": "tatsu-lab/alpaca",
+        "description": "52K instruction-following examples (Stanford Alpaca format).",
+        "size": "~25MB",
+        "split": "train",
+        "text_column": "text",
+        "category": "finetune",
+    },
+    "dolly": {
+        "name": "databricks/databricks-dolly-15k",
+        "description": "15K human-written instruction/response pairs from Databricks.",
+        "size": "~12MB",
+        "split": "train",
+        "text_column": "instruction",
+        "category": "finetune",
+    },
+    "sharegpt": {
+        "name": "anon8231489123/ShareGPT_Vicuna_unfiltered",
+        "description": "Real user conversations with ChatGPT — dialogue training.",
+        "size": "~7GB (stream)",
+        "split": "train",
+        "text_column": "conversations",
+        "category": "chat",
+    },
+
+    # ---- Science / medical ----
+    "pubmed": {
+        "name": "ccdv/pubmed-summarization",
+        "description": "PubMed abstracts — biomedical text for domain-specific LMs.",
+        "size": "~2GB",
+        "split": "train",
+        "text_column": "article",
+        "category": "science",
+    },
+    "arxiv": {
+        "name": "ccdv/arxiv-summarization",
+        "description": "arXiv paper abstracts — scientific/technical text.",
+        "size": "~3GB",
+        "split": "train",
+        "text_column": "article",
+        "category": "science",
+    },
+
+    # ---- Multilingual ----
+    "mc4": {
+        "name": "allenai/c4",
+        "subconfig": "en",
+        "description": "Multilingual C4 — web text in 101 languages.",
+        "size": "~750GB (stream)",
+        "split": "train",
+        "text_column": "text",
+        "category": "pretrain",
     },
 }
 
 
+def list_datasets(category: Optional[str] = None) -> None:
+    """Print the available HuggingFace dataset presets.
+
+    Args:
+        category: Filter by category (``pretrain``, ``code``, ``finetune``,
+            ``chat``, ``science``). ``None`` shows all.
+    """
+    print("\nAvailable HuggingFace datasets")
+    print("=" * 70)
+    for key, info in DATASET_PRESETS.items():
+        if category and info.get("category") != category:
+            continue
+        cat = info.get("category", "general")
+        print(f"  {key:<18} [{cat:>8}]  {info['size']:>12}  {info['description']}")
+    print("=" * 70)
+    print("Usage: train_file, val_file = youai.download_dataset('tinystories')\n")
+
+
+def list_datasets_by_category() -> dict:
+    """Return datasets grouped by category."""
+    result = {}
+    for key, info in DATASET_PRESETS.items():
+        cat = info.get("category", "general")
+        result.setdefault(cat, []).append(key)
+    return result
+
+
+# ======================================================================
+# Dataset classes
+# ======================================================================
 class LineTextDataset(Dataset):
     """One example per line, padded to ``max_length``. Pads are ignored in loss."""
 
@@ -119,8 +286,6 @@ class PackedTextDataset(Dataset):
     def __getitem__(self, idx: int) -> dict:
         start = idx * self.block_size
         input_ids = self.tokens[start: start + self.block_size].contiguous()
-        # The model shifts logits/labels internally, so aligned labels give the
-        # standard next-token objective with no wasted padding.
         return {
             "input_ids": input_ids,
             "attention_mask": torch.ones_like(input_ids),
@@ -248,21 +413,22 @@ def prepare_custom_text(text_files: List[str], output_dir: str = "./data",
     return _write_split(all_lines, output_dir, "custom", train_split)
 
 
-def list_datasets() -> None:
-    """Print the available HuggingFace dataset presets."""
-    print("\nAvailable HuggingFace datasets")
-    print("=" * 60)
-    for key, info in DATASET_PRESETS.items():
-        print(f"  {key:<12} {info['size']:>7}  {info['description']}")
-    print("=" * 60)
-    print("Usage: train_file, val_file = youai.download_dataset('tinystories')\n")
-
-
 def download_dataset(dataset: str, output_dir: str = "./data",
                      num_examples: Optional[int] = None,
                      train_split: float = 0.9,
                      min_chars: int = 16) -> Tuple[str, str]:
-    """Download a HuggingFace dataset preset and materialise train/val text files."""
+    """Download a HuggingFace dataset preset and materialise train/val text files.
+
+    Args:
+        dataset: One of the dataset preset names (run ``youai.list_datasets()``).
+        output_dir: Directory to write the text files.
+        num_examples: Limit the number of examples (useful for large datasets).
+        train_split: Fraction of data for training (rest is validation).
+        min_chars: Minimum character length for an example to be included.
+
+    Returns:
+        Tuple of (train_file, val_file) paths.
+    """
     try:
         from datasets import load_dataset
     except ImportError as exc:
@@ -277,7 +443,6 @@ def download_dataset(dataset: str, output_dir: str = "./data",
 
     load_kwargs = {"split": preset["split"]}
     if num_examples:
-        # Stream to avoid downloading a 40GB corpus just to keep 50k rows.
         load_kwargs["streaming"] = True
 
     if "subconfig" in preset:

@@ -151,9 +151,9 @@ def create_app(checkpoint: Optional[str] = None, device: str = "auto",
     from .streaming import StreamingGenerator
 
     if pretrained:
-        from .pretrained import from_pretrained_gpt2
+        from .pretrained import from_pretrained
 
-        inferencer = YouAIInference.from_model(from_pretrained_gpt2(pretrained), device=device)
+        inferencer = YouAIInference.from_model(from_pretrained(pretrained), device=device)
     elif checkpoint:
         inferencer = YouAIInference(checkpoint, device=device)
     else:

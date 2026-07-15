@@ -7,30 +7,43 @@ Quick start::
 
     import youai
 
-    youai.set_seed(42)
-    model = youai.create_model("125m")               # modern GPT (RoPE + SwiGLU)
+    # From scratch
+    model = youai.create_model("125m")
     train_file, val_file = youai.create_sample_data(1000)
-    youai.train(model, train_file, val_file, epochs=1)
+    youai.train(model, train_file=train_file, epochs=1)
 
-    text = youai.generate("The future of AI", checkpoint_path="./checkpoints/final")
-    print(text[0])
+    # Load any pretrained model (15+ families)
+    model = youai.from_pretrained("meta-llama/Llama-2-7b-hf")
+    model = youai.from_pretrained("Qwen/Qwen2-7B")
+    model = youai.from_pretrained("gpt2")
 
-    chat = youai.load_model("./checkpoints/final")
-    print(chat.chat("Hello!"))
+    # LoRA fine-tune in 5 lines
+    model = youai.from_pretrained("gpt2")
+    youai.train(model, train_file=train_file, lora=True, epochs=1)
+
+    # Serve with streaming
+    youai.serve(pretrained="gpt2", port=8000)
 """
 
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
-from .config import YouAIConfig, get_preset_config, list_presets
+from .config import (
+    YouAIConfig, get_preset_config, list_presets,
+    list_architecture_families, list_family_presets, create_from_family,
+    ARCHITECTURE_FAMILIES,
+)
 from .model import YouAIModel
 from .generation import GenerationConfig
 from .trainer import Trainer, TrainingConfig, estimate_training_time
 from .inference import YouAIInference
 from .streaming import StreamingGenerator, ChatSession
 from .tokenizer import get_tokenizer
-from .pretrained import from_pretrained_gpt2, GPT2_VARIANTS
+from .pretrained import (
+    from_pretrained, from_pretrained_gpt2,
+    GPT2_VARIANTS, SUPPORTED_FAMILIES, POPULAR_MODELS,
+)
 from .lora import (
     apply_lora, apply_qlora, merge_lora, save_lora, load_lora,
     trainable_parameter_summary, LoRALinear,
@@ -45,27 +58,43 @@ from .data import (
     create_dataloaders,
     download_dataset,
     list_datasets,
+    list_datasets_by_category,
     DATASET_PRESETS,
 )
+from .export import (
+    export_model, list_export_formats,
+    ModelExporter, ModelQuantizer, EXPORT_FORMATS,
+    benchmark_model as _benchmark_model_fn,
+)
 
-__version__ = "1.1.0"
+__version__ = "2.0.0"
 
 __all__ = [
     # High-level functions
-    "create_model", "from_pretrained_gpt2", "train", "generate", "load_model", "chat",
+    "create_model", "from_pretrained", "from_pretrained_gpt2",
+    "train", "generate", "load_model", "chat",
     "create_sample_data", "prepare_data", "download_dataset", "list_datasets",
-    "list_presets", "estimate_training", "find_learning_rate",
-    "stream_generate", "export_onnx", "export_quantized", "benchmark_model",
+    "list_datasets_by_category",
+    "list_presets", "list_family_presets", "list_architecture_families",
+    "create_from_family",
+    "estimate_training", "find_learning_rate",
+    "stream_generate", "export_model", "list_export_formats",
+    "benchmark_model",
     "set_seed", "set_log_level",
     # Pretrained + LoRA
-    "from_pretrained_gpt2", "GPT2_VARIANTS",
+    "from_pretrained", "from_pretrained_gpt2",
+    "GPT2_VARIANTS", "SUPPORTED_FAMILIES", "POPULAR_MODELS",
     "apply_lora", "apply_qlora", "merge_lora", "save_lora", "load_lora",
     "trainable_parameter_summary", "LoRALinear", "serve",
+    # Export
+    "export_model", "list_export_formats", "EXPORT_FORMATS",
+    "ModelExporter", "ModelQuantizer",
     # Classes / config
     "YouAIConfig", "YouAIModel", "YouAIInference", "Trainer", "TrainingConfig",
     "GenerationConfig", "StreamingGenerator", "ChatSession",
     "TextDataset", "LineTextDataset", "PackedTextDataset",
-    "get_tokenizer", "get_preset_config",
+    "get_tokenizer", "get_preset_config", "create_from_family",
+    "ARCHITECTURE_FAMILIES",
     "__version__",
 ]
 
@@ -77,8 +106,12 @@ def create_model(preset: str = "125m", modern: bool = True, **kwargs) -> YouAIMo
     """Create a model from a preset, with optional config overrides.
 
     Args:
-        preset: ``nano``, ``micro``, ``125m``, ``350m``, ``750m``, ``1.3b``, ``2b``.
+        preset: A size preset (``nano``, ``micro``, ``125m``, ``350m``,
+            ``750m``, ``1.3b``, ``2b``, ``3b``, ``7b``, ``13b``, ``34b``,
+            ``70b``) or a family preset (``llama2-7b``, ``qwen2-7b``,
+            ``mistral-7b``, ``phi-2``, etc.).
         modern: Use modern architecture defaults (RoPE + RMSNorm + SwiGLU).
+            Ignored for family presets.
         **kwargs: Any :class:`YouAIConfig` field to override.
     """
     config = get_preset_config(preset, modern=modern, **kwargs)
@@ -128,7 +161,7 @@ def train(
     """Train (or fine-tune) a model end-to-end and return final metrics.
 
     Set ``lora=True`` (or ``qlora=True``) for parameter-efficient fine-tuning of
-    a pretrained model — e.g. ``youai.from_pretrained_gpt2("gpt2")``. When LoRA
+    a pretrained model — e.g. ``youai.from_pretrained("gpt2")``. When LoRA
     is used, the adapter is saved to ``<output_dir>/adapter`` and a merged,
     ready-to-deploy checkpoint to ``<output_dir>/merged``.
 
@@ -227,26 +260,26 @@ def stream_generate(model_or_checkpoint, tokenizer=None, prompt: str = "",
 # ----------------------------------------------------------------------
 # Export
 # ----------------------------------------------------------------------
-def export_onnx(model: YouAIModel, output_path: str, **kwargs) -> str:
-    """Export a model to ONNX."""
-    from .export import ModelExporter
+def export_model(model: YouAIModel, format: str, output_path: str,
+                 tokenizer=None, **kwargs) -> str:
+    """Export a model to the specified format.
 
-    return ModelExporter(model).export_onnx(output_path, **kwargs)
+    Args:
+        model: The model to export.
+        format: One of: ``onnx``, ``torchscript``, ``safetensors``, ``gguf``,
+            ``huggingface``, ``vllm``, ``int8``, ``fp16``, ``coreml``, ``openvino``.
+        output_path: Output path or directory.
+        tokenizer: Optional tokenizer (needed for some formats).
 
-
-def export_quantized(model: YouAIModel, output_dir: str, dtype: str = "qint8") -> str:
-    """Quantize and save a model for efficient CPU inference."""
-    from .export import ModelQuantizer
-
-    quantizer = ModelQuantizer(model)
-    return quantizer.save(quantizer.dynamic_quantize(dtype=dtype), output_dir)
+    Run ``youai.list_export_formats()`` to see all options.
+    """
+    from .export import export_model as _export
+    return _export(model, format, output_path, tokenizer=tokenizer, **kwargs)
 
 
 def benchmark_model(model: YouAIModel, device: str = "cpu", **kwargs) -> dict:
     """Benchmark model inference speed."""
-    from .export import benchmark_model as _benchmark
-
-    return _benchmark(model, device=device, **kwargs)
+    return _benchmark_model_fn(model, device=device, **kwargs)
 
 
 def serve(checkpoint: str = None, host: str = "0.0.0.0", port: int = 8000,

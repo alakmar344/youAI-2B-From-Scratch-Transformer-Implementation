@@ -3,12 +3,15 @@
 Examples::
 
     youai train --preset 125m --dataset tinystories --epochs 3 --mixed-precision bf16
+    youai train --pretrained meta-llama/Llama-2-7b-hf --lora --dataset alpaca
     youai generate --checkpoint ./checkpoints/final --prompt "Hello"
     youai chat --checkpoint ./checkpoints/final
     youai export --checkpoint ./checkpoints/final --format onnx
     youai benchmark --checkpoint ./checkpoints/final
     youai info --preset 125m
     youai datasets
+    youai models
+    youai formats
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ def cmd_train(args) -> None:
     youai.set_seed(args.seed)
     if args.pretrained:
         print(f"Loading pretrained '{args.pretrained}'...")
-        model = youai.from_pretrained_gpt2(args.pretrained)
+        model = youai.from_pretrained(args.pretrained)
     else:
         print(f"Creating '{args.preset}' model...")
         model = youai.create_model(args.preset)
@@ -107,19 +110,21 @@ def _load_raw_model(checkpoint: str):
 
 
 def cmd_export(args) -> None:
-    from youai.export import ModelExporter, ModelQuantizer
+    from youai.export import ModelExporter, ModelQuantizer, export_model
 
     model = _load_raw_model(args.checkpoint)
-    if args.format == "onnx":
-        out = args.output or f"{args.checkpoint}/model.onnx"
-        ModelExporter(model).export_onnx(out)
-    elif args.format == "torchscript":
-        out = args.output or f"{args.checkpoint}/model.pt"
-        ModelExporter(model).export_torchscript(out)
-    elif args.format == "quantized":
-        out = args.output or f"{args.checkpoint}-quantized"
+    if args.format in ("onnx", "torchscript", "safetensors", "huggingface",
+                        "vllm", "gguf", "coreml", "openvino"):
+        out = args.output or f"{args.checkpoint}/{args.format}"
+        export_model(model, args.format, out)
+    elif args.format in ("int8", "fp16", "quantized"):
+        out = args.output or f"{args.checkpoint}-{args.format}"
+        dtype = "qint8" if args.format in ("int8", "quantized") else "float16"
         q = ModelQuantizer(model)
-        q.save(q.dynamic_quantize(args.dtype), out)
+        q.save(q.dynamic_quantize(dtype), out)
+    else:
+        out = args.output or f"{args.checkpoint}/{args.format}"
+        export_model(model, args.format, out)
 
 
 def cmd_benchmark(args) -> None:
@@ -158,6 +163,37 @@ def cmd_serve(args) -> None:
 
     serve(checkpoint=args.checkpoint, pretrained=args.pretrained,
           host=args.host, port=args.port, device=args.device, max_batch=args.max_batch)
+
+
+def cmd_models(args) -> None:
+    from youai.pretrained import POPULAR_MODELS, SUPPORTED_FAMILIES
+
+    if args.family:
+        family = args.family.lower()
+        if family in POPULAR_MODELS:
+            print(f"\nPopular {family} models:")
+            for m in POPULAR_MODELS[family]:
+                print(f"  {m}")
+            print(f"\nUsage: model = youai.from_pretrained('{POPULAR_MODELS[family][0]}')")
+        else:
+            print(f"Unknown family '{family}'. Supported: {SUPPORTED_FAMILIES}")
+    else:
+        print("\nSupported model families")
+        print("=" * 60)
+        for family in SUPPORTED_FAMILIES:
+            models = POPULAR_MODELS.get(family, [])
+            example = models[0] if models else family
+            print(f"  {family:<14} {len(models):>2} models  e.g. {example}")
+        print("=" * 60)
+        print(f"\nTotal: {len(SUPPORTED_FAMILIES)} families, "
+              f"{sum(len(v) for v in POPULAR_MODELS.values())} popular models")
+        print("Usage: model = youai.from_pretrained('meta-llama/Llama-2-7b-hf')")
+        print("       youai models --family llama\n")
+
+
+def cmd_formats(args) -> None:
+    from youai.export import list_export_formats
+    list_export_formats()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -214,7 +250,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     e = sub.add_parser("export", help="Export a model")
     e.add_argument("--checkpoint", required=True)
-    e.add_argument("--format", required=True, choices=["onnx", "torchscript", "quantized"])
+    e.add_argument("--format", required=True, choices=[
+        "onnx", "torchscript", "safetensors", "huggingface", "vllm",
+        "gguf", "int8", "fp16", "quantized", "coreml", "openvino",
+    ])
     e.add_argument("--output")
     e.add_argument("--dtype", default="qint8", choices=["qint8", "float16"])
     e.set_defaults(func=cmd_export)
@@ -236,12 +275,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("serve", help="Run the FastAPI inference server")
     s.add_argument("--checkpoint", help="Checkpoint directory to serve")
-    s.add_argument("--pretrained", help="Serve pretrained GPT-2 weights (e.g. gpt2)")
+    s.add_argument("--pretrained", help="Serve any pretrained model (e.g. gpt2, meta-llama/Llama-2-7b-hf)")
     s.add_argument("--host", default="0.0.0.0")
     s.add_argument("--port", type=int, default=8000)
     s.add_argument("--device", default="auto")
     s.add_argument("--max-batch", type=int, default=8)
     s.set_defaults(func=cmd_serve)
+
+    # New: list models
+    m = sub.add_parser("models", help="List supported pretrained model families")
+    m.add_argument("--family", help="Show models for a specific family (e.g. llama, qwen2)")
+    m.set_defaults(func=cmd_models)
+
+    # New: list export formats
+    fmt = sub.add_parser("formats", help="List available export formats")
+    fmt.set_defaults(func=cmd_formats)
 
     return parser
 

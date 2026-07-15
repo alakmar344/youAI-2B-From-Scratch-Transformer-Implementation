@@ -2,11 +2,11 @@
 
 # YouAI
 
-**Train your own language model from scratch — in a few lines of Python.**
+**Load, fine-tune, and serve any open-source LLM — in a few lines of Python.**
 
-A small, professional, batteries-included toolkit for building, training, serving
-and exporting transformer language models. Modern architecture, correct code,
-a real test suite, and an API you can learn in five minutes.
+A professional, batteries-included toolkit supporting **15 model families**,
+**18 datasets**, **12 export formats**, LoRA/QLoRA fine-tuning, multi-GPU
+training, and a production inference server with streaming and batching.
 
 </div>
 
@@ -17,44 +17,142 @@ a real test suite, and an API you can learn in five minutes.
 ```python
 import youai
 
-# Load REAL GPT-2 weights and generate immediately — no training required
-model = youai.from_pretrained_gpt2("gpt2")
-print(youai.YouAIInference.from_model(model).generate("The meaning of life is")[0])
+# Load ANY pretrained model — Llama, Qwen, Mistral, DeepSeek, Gemma, Phi, Falcon...
+model = youai.from_pretrained("meta-llama/Llama-2-7b-hf")
+model = youai.from_pretrained("Qwen/Qwen2-7B")
+model = youai.from_pretrained("mistralai/Mistral-7B-v0.1")
+model = youai.from_pretrained("gpt2")  # still works too
 
-# Fine-tune it on your data with LoRA — trains <0.5% of params, runs on a laptop
+# Fine-tune with LoRA — trains <0.5% of params, adapter is a few MB
 youai.train(model, "my_data.txt", epochs=1, lora=True)
 
 # Serve it as an HTTP API with streaming + batching
-youai.serve(checkpoint="./checkpoints/merged", port=8000)
+youai.serve(pretrained="gpt2", port=8000)
 ```
 
-> GPT-2 loading is **token-for-token identical** to HuggingFace (verified in the
-> test suite), which also proves the architecture is exactly correct.
+## Supported model families (15)
+
+| Family | Models | Architecture |
+|--------|--------|--------------|
+| **Llama** | Llama-2 7/13/70B, Llama-3 8/70B, CodeLlama | RoPE + RMSNorm + SwiGLU + GQA |
+| **Qwen** | Qwen2 0.5B/1.5B/7B/72B, CodeQwen | RoPE + RMSNorm + SwiGLU + GQA |
+| **Mistral** | Mistral-7B, Mixtral-8x7B | RoPE + RMSNorm + SwiGLU + GQA |
+| **DeepSeek** | DeepSeek 7B/67B | RoPE + RMSNorm + SwiGLU |
+| **Gemma** | Gemma 2B/7B | RoPE + RMSNorm + GELU |
+| **Phi** | Phi-2, Phi-3 Mini | RoPE + RMSNorm + SwiGLU |
+| **Falcon** | Falcon 7B/40B | RoPE + LayerNorm + GQA |
+| **Yi** | Yi 6B/34B | RoPE + RMSNorm + SwiGLU |
+| **Baichuan** | Baichuan 7B, Baichuan2 7B | RoPE + RMSNorm + SiLU |
+| **InternLM** | InternLM 7B, InternLM2 7B | RoPE + RMSNorm + SwiGLU |
+| **MPT** | MPT 7B | ALiBi + LayerNorm |
+| **StableLM** | StableLM 3B | RoPE + RMSNorm + SwiGLU |
+| **StarCoder** | StarCoder2 3B/7B | Learned + LayerNorm + GELU |
+| **GPT-2** | gpt2/medium/large/xl, distilgpt2 | Learned + LayerNorm + GELU |
+| **OpenELMA** | OpenELM | RoPE + RMSNorm + SwiGLU |
+
+```python
+# Auto-detect from any HuggingFace model name
+model = youai.from_pretrained("NousResearch/Llama-2-7b-hf")
+model = youai.from_pretrained("deepseek-ai/deepseek-llm-7b-base")
+model = youai.from_pretrained("google/gemma-2b")
+```
+
+## Size presets (13)
+
+| Preset | Params | | Preset | Params |
+|--------|-------:|-|--------|-------:|
+| `nano` | ~7.5M | | `3b` | ~4.2B |
+| `micro` | ~19M | | `7b` | ~7.0B |
+| `tiny` | ~42M | | `13b` | ~13B |
+| `125m` | ~152M | | `34b` | ~34B |
+| `350m` | ~454M | | `70b` | ~70B |
+| `750m` | ~983M | | | |
+| `1.3b` | ~1.7B | | | |
+| `2b` | ~3.5B | | | |
+
+## Datasets (18 presets)
+
+```python
+youai.list_datasets()  # show all
+
+# Pre-training: tinystories, wikipedia, openwebtext, c4, slimpajama,
+#               redpajama, the_pile, oscar, bookcorpus, mc4
+# Code:         code, codesearchnet, stackexchange
+# Fine-tuning:  alpaca, dolly, sharegpt
+# Science:      pubmed, arxiv
+
+train_file, val_file = youai.download_dataset("tinystories", num_examples=50000)
+train_file, val_file = youai.download_dataset("alpaca")
+```
+
+## Export formats (12)
+
+```python
+youai.list_export_formats()  # show all
+
+youai.export_model(model, "onnx", "./model.onnx")
+youai.export_model(model, "safetensors", "./model.safetensors")
+youai.export_model(model, "huggingface", "./hf_model/")
+youai.export_model(model, "vllm", "./vllm_model/")
+youai.export_model(model, "gguf", "./meta.json")
+youai.export_model(model, "int8", "./int8_model")
+youai.export_model(model, "fp16", "./fp16_model")
+youai.export_model(model, "torchscript", "./model.pt")
+```
 
 ## Why YouAI?
 
-Most people who want to *understand and own* a language model face a choice
-between 500-line research repos and heavyweight frameworks. YouAI gives you a
-clean, modern implementation you can actually read, with the ergonomics of a
-high-level library — plus the four things that make it usable for real work:
-**pretrained-weight loading, LoRA/QLoRA fine-tuning, multi-GPU training, and a
-production inference server.**
+| | YouAI | nanoGPT | HF Transformers | vLLM |
+|---|:---:|:---:|:---:|:---:|
+| Lines to load any model | **1** | ✗ | 5-10 | ✗ |
+| Lines to LoRA fine-tune | **3** | ✗ | 50+ | ✗ |
+| 15 model families | ✅ | ✗ (GPT-2) | ✅ | partial |
+| 18 dataset presets | ✅ | ✗ | partial | ✗ |
+| 12 export formats | ✅ | ✗ | partial | ✗ |
+| Inference server | ✅ | ✗ | ✗ | ✅ |
+| Multi-GPU training | ✅ | ✗ | ✅ | ✗ |
+| Readable source | ✅ | ✅ | ✗ | ✗ |
+| Test suite (126 tests) | ✅ | ✗ | ✅ | ✅ |
 
-| | YouAI | Typical from-scratch repo | Heavy framework |
-|---|:---:|:---:|:---:|
-| Lines to train a model | **~5** | 200+ | 50–100 |
-| Modern architecture (RoPE, RMSNorm, SwiGLU, GQA) | ✅ built-in | sometimes | ✅ |
-| Fused / flash attention | ✅ automatic | rare | ✅ |
-| KV-cache generation | ✅ | rare | ✅ |
-| Mixed precision (fp16/bf16) | ✅ one flag | manual | ✅ |
-| Streaming generation | ✅ built-in | ✗ | manual |
-| One-command CLI | ✅ | ✗ | partial |
-| Load pretrained GPT-2 weights | ✅ exact match | ✗ | ✅ |
-| LoRA / QLoRA fine-tuning | ✅ built-in | ✗ | separate lib |
-| Multi-GPU (accelerate/FSDP) | ✅ one flag | ✗ | ✅ |
-| Inference server (stream + batch) | ✅ built-in | ✗ | separate lib |
-| Export (ONNX / TorchScript / quantized) | ✅ | ✗ | external |
-| Readable, documented, **tested** | ✅ 61 tests | ✗ | large surface |
+## Quick start
+
+```python
+import youai
+
+youai.set_seed(42)
+
+# 1. Create a modern transformer
+model = youai.create_model("125m")
+
+# 2. Get some data
+train_file, val_file = youai.create_sample_data(2000)
+
+# 3. Train
+youai.train(model, train_file, val_file, epochs=1, mixed_precision="bf16")
+
+# 4. Generate
+print(youai.generate("The future of AI", checkpoint_path="./checkpoints/final")[0])
+
+# 5. Chat
+bot = youai.load_model("./checkpoints/final")
+print(bot.chat("Hello!"))
+```
+
+## Command line
+
+```bash
+youai info --preset 125m                      # architecture + parameter count
+youai datasets                                # list dataset presets
+youai models                                  # list supported model families
+youai models --family llama                   # list Llama model variants
+youai formats                                 # list export formats
+youai train --preset 125m --dataset tinystories --epochs 3
+youai train --pretrained meta-llama/Llama-2-7b-hf --lora --dataset alpaca
+youai generate --checkpoint ./checkpoints/final --prompt "Hello"
+youai chat --checkpoint ./checkpoints/final
+youai export --checkpoint ./checkpoints/final --format onnx
+youai serve --checkpoint ./checkpoints/final --port 8000
+```
 
 ## Installation
 
@@ -65,123 +163,17 @@ pip install -e ".[accelerate]"# + multi-GPU training
 pip install -e ".[all]"       # everything
 ```
 
-## Quick start
-
-```python
-import youai
-
-youai.set_seed(42)
-
-# 1. Create a modern transformer (RoPE + RMSNorm + SwiGLU, weights tied)
-model = youai.create_model("125m")
-
-# 2. Get some data (synthetic sample, your own files, or a HuggingFace dataset)
-train_file, val_file = youai.create_sample_data(2000)
-# train_file, val_file = youai.download_dataset("tinystories", num_examples=50_000)
-
-# 3. Train — mixed precision, packing, warmup+cosine schedule handled for you
-youai.train(model, train_file, val_file, epochs=1, mixed_precision="bf16")
-
-# 4. Generate
-print(youai.generate("The future of AI", checkpoint_path="./checkpoints/final")[0])
-
-# 5. Chat / stream
-bot = youai.load_model("./checkpoints/final")
-print(bot.chat("Hello!"))
-for piece in youai.stream_generate("./checkpoints/final", prompt="Once upon a time"):
-    print(piece, end="", flush=True)
-```
-
-## Command line
-
-```bash
-youai info --preset 125m                      # architecture + parameter count
-youai datasets                                # list dataset presets
-youai train --preset 125m --dataset tinystories --epochs 3 --mixed-precision bf16
-youai generate --checkpoint ./checkpoints/final --prompt "Hello"
-youai chat --checkpoint ./checkpoints/final
-youai export --checkpoint ./checkpoints/final --format onnx
-youai benchmark --checkpoint ./checkpoints/final
-```
-
-## Model presets
-
-| Preset | Parameters | Notes |
-|--------|-----------:|-------|
-| `nano`  | ~7.5M   | Tiny — unit tests & laptop experiments |
-| `micro` | ~19M    | Quick smoke training |
-| `125m`  | ~152M   | Great starting point |
-| `350m`  | ~454M   | |
-| `750m`  | ~983M   | |
-| `1.3b`  | ~1.7B   | |
-| `2b`    | ~3.5B   | Requires a serious GPU |
-
-Every preset defaults to a modern architecture. Pass `modern=False` for a
-classic GPT-2 style model, or override any field:
-
-```python
-model = youai.create_model("125m", num_key_value_heads=4, activation="gelu")
-```
-
-## The four unlocks
-
-### 1. Load pretrained GPT-2 (works out of the box)
-```python
-model = youai.from_pretrained_gpt2("gpt2")          # or gpt2-medium/large/xl, distilgpt2
-```
-Verified token-for-token identical to HuggingFace greedy decoding.
-
-### 2. LoRA / QLoRA fine-tuning (adapt any model on a laptop)
-```python
-model = youai.from_pretrained_gpt2("gpt2")
-metrics = youai.train(model, "data.txt", epochs=1, lora=True, lora_r=8)
-# trains ~0.5% of params; saves a few-MB adapter + a merged deployable model
-```
-QLoRA (`qlora=True`) keeps the base in 4-bit on CUDA (bitsandbytes), and degrades
-gracefully to LoRA elsewhere.
-
-### 3. Multi-GPU training
-```python
-youai.train(model, "data.txt", use_accelerate=True, mixed_precision="bf16")
-# then launch across GPUs:  accelerate launch -m youai.cli train ...
-```
-
-### 4. Production inference server
-```bash
-youai serve --checkpoint ./checkpoints/final --port 8000
-```
-FastAPI with `/generate`, `/chat`, SSE `/generate/stream`, an OpenAI-compatible
-`/v1/completions`, and a dynamic micro-batcher that fuses concurrent requests.
-
-## Feature highlights
-
-- **Modern architecture** — rotary/learned/ALiBi positions, RMSNorm/LayerNorm,
-  SwiGLU/GEGLU/GELU MLPs, grouped-query attention, weight tying.
-- **Fast & memory efficient** — fused scaled-dot-product ("flash") attention,
-  KV-cache decoding, gradient checkpointing, mixed precision.
-- **Correct training** — warmup + cosine/linear schedules, gradient
-  accumulation & clipping, padding masked out of the loss, token packing,
-  best-checkpoint tracking, early stopping, seamless resume.
-- **Great inference** — batch-correct top-k / nucleus sampling, repetition
-  penalty, greedy or sampled decoding, token streaming, chat sessions,
-  perplexity scoring.
-- **Deployment** — ONNX & TorchScript export, int8/fp16 quantization, GGUF
-  metadata, benchmarking.
-- **Quality** — typed, documented, and covered by a 61-test pytest suite.
-
 ## Testing
 
 ```bash
 pip install -e ".[dev]"
-pytest
+pytest    # 126 tests, runs in seconds on CPU
 ```
-
-The suite runs in seconds on CPU and needs no GPU.
 
 ## Documentation
 
 See [`DOCUMENTATION.md`](DOCUMENTATION.md) for the full API reference and
-[`CHANGELOG.md`](CHANGELOG.md) for what changed in 1.0.
+[`CHANGELOG.md`](CHANGELOG.md) for the version history.
 
 ## License
 

@@ -112,10 +112,10 @@ class Attention(nn.Module):
         self.rotary = rotary
         self.use_alibi = config.position_embedding_type == "alibi"
 
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim)
-        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim)
-        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size)
+        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.use_attention_bias)
+        self.k_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.use_attention_bias)
+        self.v_proj = nn.Linear(config.hidden_size, self.num_kv_heads * self.head_dim, bias=config.use_attention_bias)
+        self.o_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=config.use_attention_bias)
         self.dropout_p = config.attention_dropout_prob
         self.resid_dropout = nn.Dropout(config.hidden_dropout_prob)
 

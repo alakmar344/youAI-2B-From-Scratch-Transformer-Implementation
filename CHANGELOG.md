@@ -1,77 +1,80 @@
 # Changelog
 
-## 1.1.0
+## 2.0.0 — Universal pretrained model loading
 
-The "make it usable for real work" release: four features that turn YouAI from a
-correct-but-academic library into one a practitioner can actually adopt.
+### Breaking changes
+- `from_pretrained_gpt2()` is deprecated. Use `from_pretrained()` instead — it
+  supports all 15 model families and auto-detects the architecture.
+- `use_attention_bias` config field added (defaults to `False`). GPT-2 style
+  presets set it to `True`. This only affects new models; existing checkpoints
+  are unaffected.
 
-### Added
-- **Pretrained GPT-2 loading** — `youai.from_pretrained_gpt2("gpt2" | "gpt2-medium"
-  | "gpt2-large" | "gpt2-xl" | "distilgpt2")` maps HuggingFace weights (fused
-  `c_attn` QKV split + `Conv1D` transpose) into a YouAIModel. Adds the `gelu_new`
-  activation; output is **token-for-token identical to HuggingFace** (asserted in
-  tests). This also validates the whole architecture is exactly correct.
-- **LoRA / QLoRA fine-tuning** (`youai.lora`) — `LoRALinear`, `apply_lora`,
-  `apply_qlora`, `merge_lora`, `save_lora`, `load_lora`. `youai.train(model, ...,
-  lora=True)` fine-tunes <1% of parameters, saving a few-MB adapter plus a merged
-  deployable checkpoint. QLoRA uses bitsandbytes 4-bit on CUDA, falling back to
-  LoRA otherwise.
-- **Multi-GPU training via accelerate** — `TrainingConfig(use_accelerate=True)` /
-  `youai.train(..., use_accelerate=True)`. Correct gradient sync
-  (`accelerator.accumulate`), cross-process metric gathering, main-process
-  checkpointing of the unwrapped model. FSDP/DeepSpeed via `accelerate config`.
-- **FastAPI inference server** (`youai.server`, `youai.serve`, `youai serve`) —
-  `/health`, `/generate`, `/chat`, SSE `/generate/stream`, OpenAI-style
-  `/v1/completions`, and a dynamic micro-batcher fusing concurrent requests.
-  `YouAIInference.generate_batch` adds correct left-padded batched decoding.
-- CLI: `--pretrained`, `--lora`, `--qlora`, `--lora-r`, `--accelerate` on `train`;
-  new `serve` command. New extras: `server`, `accelerate`, `qlora`.
-- 16 new tests (61 total) for LoRA, GPT-2 loading and the HTTP server.
+### New features
 
-## 1.0.0
+#### 15 pretrained model families
+- `youai.from_pretrained("meta-llama/Llama-2-7b-hf")` — load ANY supported
+  model with a single function call. Auto-detects architecture from HuggingFace
+  config. Supports: Llama (1/2/3), Qwen (1/1.5/2), Mistral, DeepSeek, Gemma,
+  Phi (1/2/3), Falcon, Yi, Baichuan, InternLM, MPT, StableLM, StarCoder,
+  OpenELMA, GPT-2.
+- `youai.models` CLI command to list all supported families and popular models.
 
-A ground-up rewrite of the core library: modern architecture, correctness fixes
-and a real test suite.
+#### 13 size presets + 37 family presets
+- New size presets: `tiny`, `3b`, `7b`, `13b`, `34b`, `70b`.
+- 37 architecture family presets: `llama2-7b`, `qwen2-7b`, `mistral-7b`,
+  `phi-2`, `gemma-2b`, `falcon-7b`, `deepseek-7b`, `yi-6b`, `baichuan-7b`,
+  `internlm-7b`, `mpt-7b`, `stablelm-3b`, `starcoder-3b`, `gpt2-style`, etc.
+- `youai.create_from_family("llama2-7b")` or `youai.get_preset_config("llama2-7b")`.
+- `youai.list_architecture_families()` and `youai.list_family_presets()`.
 
-### Added
-- **Modern architecture** — rotary (RoPE), learned and ALiBi positional
-  embeddings; RMSNorm and LayerNorm; SwiGLU / GEGLU / GELU / SiLU / ReLU MLPs;
-  grouped-query attention (`num_key_value_heads`).
-- **Fused ("flash") attention** via `torch.nn.functional.scaled_dot_product_attention`,
-  with a correct manual fallback that produces identical results.
-- **KV-cache generation** — verified token-for-token identical to the cacheless
-  path under greedy decoding.
-- **Weight tying**, scaled residual initialisation, working gradient checkpointing.
-- **`save_pretrained` / `from_pretrained`** on the model.
-- **Shared, batch-correct sampling** (`youai.generation`) with repetition
-  penalty, greedy/sampled decoding, `min_new_tokens` and EOS handling.
-- **Token packing** dataset (`PackedTextDataset`) — trains on full blocks with
-  no wasted padding.
-- **Consolidated trainer** with mixed precision (new `torch.amp` API), gradient
-  accumulation, warmup + cosine/linear/constant schedules, best-checkpoint
-  tracking, early stopping, `save_total_limit`, callbacks and full resume.
-- **Streaming** with incremental decoding and stop sequences; `ChatSession`.
-- **Export** to ONNX / TorchScript / quantized, plus GGUF metadata and
-  benchmarking.
-- **Utilities** — `set_seed`, device resolution, structured logging.
-- **New presets** `nano`, `micro`, `1.3b`; accurate parameter counting.
-- **`pytest` suite** — 45 tests covering config, model, generation, data,
-  trainer and inference; runs on CPU with no network.
-- `pyproject.toml`, richer `setup.py`, `CHANGELOG.md`.
+#### 18 dataset presets
+- New: `c4`, `slimpajama`, `redpajama`, `the_pile`, `oscar`, `bookcorpus`,
+  `codesearchnet`, `stackexchange`, `alpaca`, `dolly`, `sharegpt`, `pubmed`,
+  `arxiv`, `mc4`.
+- `youai.list_datasets(category="code")` to filter by category.
+- `youai.list_datasets_by_category()` to group datasets.
 
-### Fixed
-- **Context overflow** — generating past `max_position_embeddings` crashed; the
-  context is now truncated (and `forward` raises a clear error).
-- **Batched top-p sampling bug** — nucleus filtering removed the wrong tokens
-  for batch sizes > 1; now implemented with `scatter`.
-- **Padding leaked into the loss** — pad positions are masked to `-100`.
-- **CLI `train` crash** — the trainer was constructed with a `None` dataloader.
-- **ONNX / TorchScript export** — tracing failed on the dict-returning `forward`;
-  a logits wrapper fixes it.
-- **Hard-coded EOS id (50256)** — the model now uses `config.eos_token_id`.
-- Removed deprecated `torch.cuda.amp` usage.
+#### 12 export formats
+- New: `safetensors`, `huggingface`, `vllm`, `gguf`, `coreml`, `openvino`,
+  `ctranslate2`, `tflite`.
+- `youai.list_export_formats()` to see all formats with descriptions.
+- `youai.export_model(model, "vllm", "./vllm_model/")` for vLLM serving.
+- `youai.export_model(model, "safetensors", "./model.safetensors")` for safe
+  serialization.
+- `youai.export_model(model, "huggingface", "./hf_model/")` for HuggingFace
+  compatibility.
+- `youai.formats` CLI command.
 
-### Changed
-- `training_advanced.MixedPrecisionTrainer` is now an alias of the consolidated
-  `youai.Trainer` (kept for backward compatibility).
-- `generate` defaults to `max_new_tokens` semantics (with `max_length` alias).
+#### Other improvements
+- `use_attention_bias` config option for correct bias handling per architecture.
+- Multi-batch benchmarking: `benchmark_model(model, batch_sizes=[1, 4, 8])`.
+- Server now accepts any pretrained model name (not just GPT-2).
+- CLI `--pretrained` flag now accepts any HuggingFace model name.
+
+### Bug fixes
+- Fixed duplicate keyword arg in `_hf_to_youai_config`.
+- Fixed `safetensors` export failing on tied weights (clone before save).
+- Fixed param count formula to account for `use_attention_bias`.
+
+### Tests
+- Test suite grew from 61 → **126 tests**, all passing.
+- Added offline architecture detection tests for all 15 families.
+- Added weight conversion tests for Llama-style and GPT-2-style.
+- Added export format tests for all 12 formats.
+- Added dataset preset validation tests.
+
+## 1.1.0 — LoRA, multi-GPU, inference server
+
+- LoRA / QLoRA fine-tuning.
+- Multi-GPU training via accelerate.
+- FastAPI inference server with streaming, batching, OpenAI-compatible API.
+- GPT-2 pretrained weight loading (token-for-token identical to HuggingFace).
+- 61-test pytest suite.
+
+## 1.0.0 — Initial release
+
+- Modern transformer architecture (RoPE, RMSNorm, SwiGLU, GQA, flash attention).
+- Training loop with mixed precision, gradient accumulation, warmup+cosine schedule.
+- KV-cache generation, streaming, chat sessions.
+- ONNX / TorchScript export, INT8 / FP16 quantization.
+- CLI interface.
