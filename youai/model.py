@@ -456,6 +456,10 @@ class YouAIModel(nn.Module):
         finished = torch.zeros(input_ids.size(0), dtype=torch.bool, device=input_ids.device)
 
         for step in range(cfg.max_new_tokens):
+            # The KV cache cannot grow beyond the context window; stop cleanly
+            # instead of raising. Without a cache we slide the window instead.
+            if use_cache and generated.size(1) >= max_ctx:
+                break
             # Truncate context to the model's window when not using a cache.
             model_input = cur if (use_cache and past is not None) else generated[:, -max_ctx:]
             out = self.forward(model_input, past_key_values=past, use_cache=use_cache)
@@ -476,9 +480,6 @@ class YouAIModel(nn.Module):
                 finished = finished | (next_token.squeeze(1) == cfg.eos_token_id)
                 if bool(finished.all()):
                     break
-
-            if generated.size(1) >= max_ctx and not use_cache:
-                break
 
         if was_training:
             self.train()

@@ -77,6 +77,16 @@ def test_generation_respects_eos():
     assert out.shape[1] == 9
 
 
+def test_generation_stops_at_context_limit():
+    # Ask for far more tokens than the context window; must not raise.
+    model = _make(max_position_embeddings=16)
+    ids = torch.randint(0, 64, (1, 10))
+    out_cache = model.generate(ids, max_new_tokens=100, do_sample=False, use_cache=True, eos_token_id=None)
+    assert out_cache.shape[1] <= 16
+    out_slide = model.generate(ids, max_new_tokens=20, do_sample=False, use_cache=False, eos_token_id=None)
+    assert out_slide.shape[1] == 30  # sliding window keeps generating
+
+
 def test_save_and_load(tiny_model, tmp_path):
     ids = torch.randint(0, 128, (1, 6))
     tiny_model.save_pretrained(str(tmp_path))
