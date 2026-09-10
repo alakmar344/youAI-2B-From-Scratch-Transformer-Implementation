@@ -9,6 +9,12 @@ A professional, batteries-included toolkit: **15 model families**, **18 datasets
 (DARE/TIES/SLERP), evaluation tools, multi-GPU training, and a production
 inference server with streaming and batching.
 
+**Home: [esamz.me](https://esamz.me)** — this toolkit grew out of building
+[eSAMz](https://esamz.me) and its AI stack. It started as a 2B-parameter
+transformer written from scratch, and grew into the full toolkit it is today
+(v3.0.0). 20 modules in `youai/`, 14 test files in `tests/` — everything
+listed above is code you can read, run, and test, not marketing copy.
+
 </div>
 
 ---
